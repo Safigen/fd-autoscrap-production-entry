@@ -11,251 +11,251 @@
     "*.css"
   ],
   "files": [
-    "dist"
+    "build"
   ],
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": "./build/index.js",
+      "types": "./build/index.d.ts"
     },
     "./accordion": {
-      "import": "./dist/accordion/index.js",
-      "types": "./dist/accordion/index.d.ts"
+      "import": "./build/accordion/index.js",
+      "types": "./build/accordion/index.d.ts"
     },
     "./alert-dialog": {
-      "import": "./dist/alert-dialog/index.js",
-      "types": "./dist/alert-dialog/index.d.ts"
+      "import": "./build/alert-dialog/index.js",
+      "types": "./build/alert-dialog/index.d.ts"
     },
     "./app-bar": {
-      "import": "./dist/app-bar/index.js",
-      "types": "./dist/app-bar/index.d.ts"
+      "import": "./build/app-bar/index.js",
+      "types": "./build/app-bar/index.d.ts"
     },
     "./assets": {
-      "import": "./dist/assets/index.js",
-      "types": "./dist/assets/index.d.ts"
+      "import": "./build/assets/index.js",
+      "types": "./build/assets/index.d.ts"
     },
     "./avatar": {
-      "import": "./dist/avatar/index.js",
-      "types": "./dist/avatar/index.d.ts"
+      "import": "./build/avatar/index.js",
+      "types": "./build/avatar/index.d.ts"
     },
     "./badge": {
-      "import": "./dist/badge/index.js",
-      "types": "./dist/badge/index.d.ts"
+      "import": "./build/badge/index.js",
+      "types": "./build/badge/index.d.ts"
     },
     "./banner": {
-      "import": "./dist/banner/index.js",
-      "types": "./dist/banner/index.d.ts"
+      "import": "./build/banner/index.js",
+      "types": "./build/banner/index.d.ts"
     },
     "./breadcrumb": {
-      "import": "./dist/breadcrumb/index.js",
-      "types": "./dist/breadcrumb/index.d.ts"
+      "import": "./build/breadcrumb/index.js",
+      "types": "./build/breadcrumb/index.d.ts"
     },
     "./button": {
-      "import": "./dist/button/index.js",
-      "types": "./dist/button/index.d.ts"
+      "import": "./build/button/index.js",
+      "types": "./build/button/index.d.ts"
     },
     "./card": {
-      "import": "./dist/card/index.js",
-      "types": "./dist/card/index.d.ts"
+      "import": "./build/card/index.js",
+      "types": "./build/card/index.d.ts"
     },
     "./card-list": {
-      "import": "./dist/card-list/index.js",
-      "types": "./dist/card-list/index.d.ts"
+      "import": "./build/card-list/index.js",
+      "types": "./build/card-list/index.d.ts"
     },
     "./chart": {
-      "import": "./dist/chart/index.js",
-      "types": "./dist/chart/index.d.ts"
+      "import": "./build/chart/index.js",
+      "types": "./build/chart/index.d.ts"
     },
     "./checkbox": {
-      "import": "./dist/checkbox/index.js",
-      "types": "./dist/checkbox/index.d.ts"
+      "import": "./build/checkbox/index.js",
+      "types": "./build/checkbox/index.d.ts"
     },
     "./chip": {
-      "import": "./dist/chip/index.js",
-      "types": "./dist/chip/index.d.ts"
+      "import": "./build/chip/index.js",
+      "types": "./build/chip/index.d.ts"
     },
     "./comment-thread": {
-      "import": "./dist/comment-thread/index.js",
-      "types": "./dist/comment-thread/index.d.ts"
+      "import": "./build/comment-thread/index.js",
+      "types": "./build/comment-thread/index.d.ts"
     },
     "./data-table": {
-      "import": "./dist/data-table/index.js",
-      "types": "./dist/data-table/index.d.ts"
+      "import": "./build/data-table/index.js",
+      "types": "./build/data-table/index.d.ts"
     },
     "./date-picker": {
-      "import": "./dist/date-picker/index.js",
-      "types": "./dist/date-picker/index.d.ts"
+      "import": "./build/date-picker/index.js",
+      "types": "./build/date-picker/index.d.ts"
     },
     "./date-range-picker": {
-      "import": "./dist/date-range-picker/index.js",
-      "types": "./dist/date-range-picker/index.d.ts"
+      "import": "./build/date-range-picker/index.js",
+      "types": "./build/date-range-picker/index.d.ts"
     },
     "./device-select": {
-      "import": "./dist/device-select/index.js",
-      "types": "./dist/device-select/index.d.ts"
+      "import": "./build/device-select/index.js",
+      "types": "./build/device-select/index.d.ts"
     },
     "./dialog": {
-      "import": "./dist/dialog/index.js",
-      "types": "./dist/dialog/index.d.ts"
+      "import": "./build/dialog/index.js",
+      "types": "./build/dialog/index.d.ts"
     },
     "./drawer": {
-      "import": "./dist/drawer/index.js",
-      "types": "./dist/drawer/index.d.ts"
+      "import": "./build/drawer/index.js",
+      "types": "./build/drawer/index.d.ts"
     },
     "./dropdown-menu": {
-      "import": "./dist/dropdown-menu/index.js",
-      "types": "./dist/dropdown-menu/index.d.ts"
+      "import": "./build/dropdown-menu/index.js",
+      "types": "./build/dropdown-menu/index.d.ts"
     },
     "./empty-state": {
-      "import": "./dist/empty-state/index.js",
-      "types": "./dist/empty-state/index.d.ts"
+      "import": "./build/empty-state/index.js",
+      "types": "./build/empty-state/index.d.ts"
     },
     "./expandable-search": {
-      "import": "./dist/expandable-search/index.js",
-      "types": "./dist/expandable-search/index.d.ts"
+      "import": "./build/expandable-search/index.js",
+      "types": "./build/expandable-search/index.d.ts"
     },
     "./field": {
-      "import": "./dist/field/index.js",
-      "types": "./dist/field/index.d.ts"
+      "import": "./build/field/index.js",
+      "types": "./build/field/index.d.ts"
     },
     "./filter-bar": {
-      "import": "./dist/filter-bar/index.js",
-      "types": "./dist/filter-bar/index.d.ts"
+      "import": "./build/filter-bar/index.js",
+      "types": "./build/filter-bar/index.d.ts"
     },
     "./filter-trigger": {
-      "import": "./dist/filter-trigger/index.js",
-      "types": "./dist/filter-trigger/index.d.ts"
+      "import": "./build/filter-trigger/index.js",
+      "types": "./build/filter-trigger/index.d.ts"
     },
     "./icons": {
-      "import": "./dist/icons/index.js",
-      "types": "./dist/icons/index.d.ts"
+      "import": "./build/icons/index.js",
+      "types": "./build/icons/index.d.ts"
     },
     "./input": {
-      "import": "./dist/input/index.js",
-      "types": "./dist/input/index.d.ts"
+      "import": "./build/input/index.js",
+      "types": "./build/input/index.d.ts"
     },
     "./label": {
-      "import": "./dist/label/index.js",
-      "types": "./dist/label/index.d.ts"
+      "import": "./build/label/index.js",
+      "types": "./build/label/index.d.ts"
     },
     "./layout": {
-      "import": "./dist/layout/index.js",
-      "types": "./dist/layout/index.d.ts"
+      "import": "./build/layout/index.js",
+      "types": "./build/layout/index.d.ts"
     },
     "./link": {
-      "import": "./dist/link/index.js",
-      "types": "./dist/link/index.d.ts"
+      "import": "./build/link/index.js",
+      "types": "./build/link/index.d.ts"
     },
     "./live-mode-button": {
-      "import": "./dist/live-mode-button/index.js",
-      "types": "./dist/live-mode-button/index.d.ts"
+      "import": "./build/live-mode-button/index.js",
+      "types": "./build/live-mode-button/index.d.ts"
     },
     "./menu": {
-      "import": "./dist/menu/index.js",
-      "types": "./dist/menu/index.d.ts"
+      "import": "./build/menu/index.js",
+      "types": "./build/menu/index.d.ts"
     },
     "./metric-card": {
-      "import": "./dist/metric-card/index.js",
-      "types": "./dist/metric-card/index.d.ts"
+      "import": "./build/metric-card/index.js",
+      "types": "./build/metric-card/index.d.ts"
     },
     "./metric-tile": {
-      "import": "./dist/metric-tile/index.js",
-      "types": "./dist/metric-tile/index.d.ts"
+      "import": "./build/metric-tile/index.js",
+      "types": "./build/metric-tile/index.d.ts"
     },
     "./navigation-sidebar": {
-      "import": "./dist/navigation-sidebar/index.js",
-      "types": "./dist/navigation-sidebar/index.d.ts"
+      "import": "./build/navigation-sidebar/index.js",
+      "types": "./build/navigation-sidebar/index.d.ts"
     },
     "./overlay": {
-      "import": "./dist/overlay/index.js",
-      "types": "./dist/overlay/index.d.ts"
+      "import": "./build/overlay/index.js",
+      "types": "./build/overlay/index.d.ts"
     },
     "./pagination": {
-      "import": "./dist/pagination/index.js",
-      "types": "./dist/pagination/index.d.ts"
+      "import": "./build/pagination/index.js",
+      "types": "./build/pagination/index.d.ts"
     },
     "./popover": {
-      "import": "./dist/popover/index.js",
-      "types": "./dist/popover/index.d.ts"
+      "import": "./build/popover/index.js",
+      "types": "./build/popover/index.d.ts"
     },
     "./progress": {
-      "import": "./dist/progress/index.js",
-      "types": "./dist/progress/index.d.ts"
+      "import": "./build/progress/index.js",
+      "types": "./build/progress/index.d.ts"
     },
     "./radio-group": {
-      "import": "./dist/radio-group/index.js",
-      "types": "./dist/radio-group/index.d.ts"
+      "import": "./build/radio-group/index.js",
+      "types": "./build/radio-group/index.d.ts"
     },
     "./scrollbox": {
-      "import": "./dist/scrollbox/index.js",
-      "types": "./dist/scrollbox/index.d.ts"
+      "import": "./build/scrollbox/index.js",
+      "types": "./build/scrollbox/index.d.ts"
     },
     "./search-input": {
-      "import": "./dist/search-input/index.js",
-      "types": "./dist/search-input/index.d.ts"
+      "import": "./build/search-input/index.js",
+      "types": "./build/search-input/index.d.ts"
     },
     "./select": {
-      "import": "./dist/select/index.js",
-      "types": "./dist/select/index.d.ts"
+      "import": "./build/select/index.js",
+      "types": "./build/select/index.d.ts"
     },
     "./separator": {
-      "import": "./dist/separator/index.js",
-      "types": "./dist/separator/index.d.ts"
+      "import": "./build/separator/index.js",
+      "types": "./build/separator/index.d.ts"
     },
     "./skeleton": {
-      "import": "./dist/skeleton/index.js",
-      "types": "./dist/skeleton/index.d.ts"
+      "import": "./build/skeleton/index.js",
+      "types": "./build/skeleton/index.d.ts"
     },
     "./status-indicator": {
-      "import": "./dist/status-indicator/index.js",
-      "types": "./dist/status-indicator/index.d.ts"
+      "import": "./build/status-indicator/index.js",
+      "types": "./build/status-indicator/index.d.ts"
     },
-    "./styles.css": "./dist/styles.css",
+    "./styles.css": "./build/styles.css",
     "./switch": {
-      "import": "./dist/switch/index.js",
-      "types": "./dist/switch/index.d.ts"
+      "import": "./build/switch/index.js",
+      "types": "./build/switch/index.d.ts"
     },
     "./table": {
-      "import": "./dist/table/index.js",
-      "types": "./dist/table/index.d.ts"
+      "import": "./build/table/index.js",
+      "types": "./build/table/index.d.ts"
     },
     "./tabs": {
-      "import": "./dist/tabs/index.js",
-      "types": "./dist/tabs/index.d.ts"
+      "import": "./build/tabs/index.js",
+      "types": "./build/tabs/index.d.ts"
     },
     "./tailwind-preset": {
-      "import": "./dist/tailwind.preset.js",
-      "types": "./dist/tailwind.preset.d.ts"
+      "import": "./build/tailwind.preset.js",
+      "types": "./build/tailwind.preset.d.ts"
     },
     "./textarea": {
-      "import": "./dist/textarea/index.js",
-      "types": "./dist/textarea/index.d.ts"
+      "import": "./build/textarea/index.js",
+      "types": "./build/textarea/index.d.ts"
     },
     "./tile": {
-      "import": "./dist/tile/index.js",
-      "types": "./dist/tile/index.d.ts"
+      "import": "./build/tile/index.js",
+      "types": "./build/tile/index.d.ts"
     },
     "./time-segment": {
-      "import": "./dist/time-segment/index.js",
-      "types": "./dist/time-segment/index.d.ts"
+      "import": "./build/time-segment/index.js",
+      "types": "./build/time-segment/index.d.ts"
     },
     "./toaster": {
-      "import": "./dist/toaster/index.js",
-      "types": "./dist/toaster/index.d.ts"
+      "import": "./build/toaster/index.js",
+      "types": "./build/toaster/index.d.ts"
     },
     "./toggle": {
-      "import": "./dist/toggle/index.js",
-      "types": "./dist/toggle/index.d.ts"
+      "import": "./build/toggle/index.js",
+      "types": "./build/toggle/index.d.ts"
     },
-    "./tokens": "./dist/tokens/index.css",
+    "./tokens": "./build/tokens/index.css",
     "./tailwind.preset": {
-      "import": "./dist/tailwind.preset.js",
-      "require": "./dist/tailwind.preset.js",
-      "default": "./dist/tailwind.preset.js"
+      "import": "./build/tailwind.preset.js",
+      "require": "./build/tailwind.preset.js",
+      "default": "./build/tailwind.preset.js"
     },
     "./tooltip": {
-      "import": "./dist/tooltip/index.js",
-      "types": "./dist/tooltip/index.d.ts"
+      "import": "./build/tooltip/index.js",
+      "types": "./build/tooltip/index.d.ts"
     }
   },
   "scripts": {

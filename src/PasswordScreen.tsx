@@ -5,7 +5,7 @@ import { FlexColumn } from '@guidewheel/ui/layout';
 import { Field, FieldLabel, FieldError } from '@guidewheel/ui/field';
 import { GuidewheelLogo } from '@guidewheel/ui/assets';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:3001' : '');
 
 interface PasswordScreenProps {
   onVerified: (token: string) => void;

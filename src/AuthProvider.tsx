@@ -4,7 +4,7 @@ import App from './App';
 import { PasswordScreen } from './PasswordScreen';
 import { EmailScreen } from './EmailScreen';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:3001' : '');
 
 posthog.init('phc_QIgbD8nFuxMwPrURQbXJxKqI1uEwrmWrnorrr5v1oto', {
   api_host: 'https://us.i.posthog.com',

@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@guidewheel/ui/tabs';
 import { Switch } from '@guidewheel/ui/switch';
 import { Label } from '@guidewheel/ui/label';
 import { Input, NumberInput } from '@guidewheel/ui/input';
-import { CalendarIcon } from '@guidewheel/ui/icons';
+import { CalendarIcon, ChevronDownIcon, ChevronUpIcon } from '@guidewheel/ui/icons';
 import { Popover, PopoverTrigger, PopoverContent } from '@guidewheel/ui/popover';
 import { DayPicker } from 'react-day-picker';
 import {
@@ -20,6 +20,9 @@ import {
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@guidewheel/ui/select';
+import { SearchInput } from '@guidewheel/ui/search-input';
+import { Menu } from '@guidewheel/ui/menu';
+import { DisclosureTrigger } from '@guidewheel/ui/button';
 import {
   fetchDevices, fetchEnergy, createProductionEntry,
   fetchSchedules, createSchedule, updateSchedule, deleteSchedule,
@@ -133,6 +136,91 @@ function PastDatePicker({ selected, onSelect, placeholder = 'Pick a date' }: {
   );
 }
 
+/** Alphabetical sort by nickname (case-insensitive), fallback to deviceid. */
+function sortDevicesByName(a: Device, b: Device): number {
+  const an = (a.nickname || a.deviceid).toLowerCase();
+  const bn = (b.nickname || b.deviceid).toLowerCase();
+  return an.localeCompare(bn);
+}
+
+/** Searchable device picker. Wraps Menu for single-select with built-in search. */
+function DevicePicker({
+  devices,
+  value,
+  onChange,
+  placeholder = 'Select device',
+  className,
+}: {
+  devices: Device[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const groups = useMemo(
+    () => [
+      {
+        items: devices.map((d) => ({
+          id: d.deviceid,
+          label: d.nickname || d.deviceid,
+        })),
+      },
+    ],
+    [devices],
+  );
+  const selected = devices.find((d) => d.deviceid === value);
+  const label = selected ? (selected.nickname || selected.deviceid) : placeholder;
+
+  return (
+    <Menu
+      trigger={
+        <DisclosureTrigger
+          className={`w-full justify-between font-normal ${!selected ? 'text-muted-foreground' : ''} ${className ?? ''}`}
+        >
+          <span className="truncate">{label}</span>
+        </DisclosureTrigger>
+      }
+      groups={groups}
+      selected={value}
+      onSelect={onChange}
+      searchable
+      searchPlaceholder="Search devices..."
+    />
+  );
+}
+
+type SortDir = 'asc' | 'desc';
+
+function SortableHead({
+  label,
+  columnId,
+  sortBy,
+  sortDir,
+  onSort,
+  align = 'left',
+}: {
+  label: React.ReactNode;
+  columnId: string;
+  sortBy: string;
+  sortDir: SortDir;
+  onSort: (id: string) => void;
+  align?: 'left' | 'right';
+}) {
+  const active = sortBy === columnId;
+  return (
+    <TableHead className={align === 'right' ? 'text-right' : undefined}>
+      <button
+        type="button"
+        onClick={() => onSort(columnId)}
+        className={`inline-flex items-center gap-1 select-none hover:text-foreground ${active ? 'text-foreground font-semibold' : ''}`}
+      >
+        <span>{label}</span>
+        {active && (sortDir === 'asc' ? <ChevronUpIcon size="xs" /> : <ChevronDownIcon size="xs" />)}
+      </button>
+    </TableHead>
+  );
+}
+
 function App() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,12 +260,22 @@ function App() {
   // Settings tab
   const [settingsDivisor, setSettingsDivisor] = useState(defaultDivisor);
 
+  // Energy table controls
+  const [energySearch, setEnergySearch] = useState('');
+  const [energySortBy, setEnergySortBy] = useState<string>('nickname');
+  const [energySortDir, setEnergySortDir] = useState<SortDir>('asc');
+
+  // History table controls
+  const [historySearch, setHistorySearch] = useState('');
+  const [historySortBy, setHistorySortBy] = useState<string>('source');
+  const [historySortDir, setHistorySortDir] = useState<SortDir>('asc');
+
   // Load devices on mount
   useEffect(() => {
     async function load() {
       try {
         const devs = await fetchDevices();
-        setDevices(devs);
+        setDevices([...devs].sort(sortDevicesByName));
       } catch {
         toastFor(TOASTER_ID).error('Failed to load devices. Please refresh.');
       } finally {
@@ -280,6 +378,78 @@ function App() {
       wasteValue: e.energy.total != null && divisor > 0 ? +(e.energy.total / divisor).toFixed(4) : null,
     }));
   }, [energy, deviceMap, divisor]);
+
+  const displayedEnergy = useMemo(() => {
+    const q = energySearch.trim().toLowerCase();
+    const filtered = q
+      ? enrichedEnergy.filter((e) => (e.nickname || e.deviceid).toLowerCase().includes(q))
+      : enrichedEnergy;
+    const dir = energySortDir === 'asc' ? 1 : -1;
+    const keyFns: Record<string, (e: typeof enrichedEnergy[number]) => string | number> = {
+      nickname: (e) => (e.nickname || e.deviceid).toLowerCase(),
+      online: (e) => e.energy.online ?? -Infinity,
+      idle: (e) => e.energy.idle ?? -Infinity,
+      offline: (e) => e.energy.offline ?? -Infinity,
+      total: (e) => e.energy.total ?? -Infinity,
+      waste: (e) => e.wasteValue ?? -Infinity,
+    };
+    const keyFn = keyFns[energySortBy] ?? keyFns.nickname;
+    return [...filtered].sort((a, b) => {
+      const av = keyFn(a);
+      const bv = keyFn(b);
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  }, [enrichedEnergy, energySearch, energySortBy, energySortDir]);
+
+  const handleEnergySort = (id: string) => {
+    if (energySortBy === id) {
+      setEnergySortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setEnergySortBy(id);
+      setEnergySortDir('asc');
+    }
+  };
+
+  const displayedHistory = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    const filtered = q
+      ? storedEntries.filter((e) => {
+          const src = deviceName(e.source_device_id).toLowerCase();
+          const tgt = deviceName(e.target_device_id).toLowerCase();
+          return src.includes(q) || tgt.includes(q);
+        })
+      : storedEntries;
+    const dir = historySortDir === 'asc' ? 1 : -1;
+    const keyFns: Record<string, (e: CreatedEntry) => string | number> = {
+      source: (e) => deviceName(e.source_device_id).toLowerCase(),
+      target: (e) => deviceName(e.target_device_id).toLowerCase(),
+      date: (e) => Number(e.from_ts) || 0,
+      energy: (e) => e.total_energy ?? -Infinity,
+      divisor: (e) => e.divisor ?? 0,
+      waste: (e) => (e.waste_value ?? -Infinity) as number,
+      created: (e) => new Date(e.created_at).getTime(),
+    };
+    const keyFn = keyFns[historySortBy] ?? keyFns.source;
+    return [...filtered].sort((a, b) => {
+      const av = keyFn(a);
+      const bv = keyFn(b);
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storedEntries, historySearch, historySortBy, historySortDir, deviceMap]);
+
+  const handleHistorySort = (id: string) => {
+    if (historySortBy === id) {
+      setHistorySortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setHistorySortBy(id);
+      setHistorySortDir('asc');
+    }
+  };
 
   const totalEnergy = useMemo(() => energy.reduce((sum, e) => sum + (e.energy.total ?? 0), 0), [energy]);
   const totalWaste = divisor > 0 ? totalEnergy / divisor : 0;
@@ -406,33 +576,21 @@ function App() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label className="mb-1.5 block text-sm">Source device (pull energy from)</Label>
-                    <Select value={sourceDeviceId} onValueChange={setSourceDeviceId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select source device" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {devices.map((d) => (
-                          <SelectItem key={d.deviceid} value={d.deviceid}>
-                            {d.nickname || d.deviceid}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <DevicePicker
+                      devices={devices}
+                      value={sourceDeviceId}
+                      onChange={setSourceDeviceId}
+                      placeholder="Select source device"
+                    />
                   </div>
                   <div>
                     <Label className="mb-1.5 block text-sm">Target device (create entry for)</Label>
-                    <Select value={targetDeviceId} onValueChange={setTargetDeviceId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select target device" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {devices.map((d) => (
-                          <SelectItem key={d.deviceid} value={d.deviceid}>
-                            {d.nickname || d.deviceid}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <DevicePicker
+                      devices={devices}
+                      value={targetDeviceId}
+                      onChange={setTargetDeviceId}
+                      placeholder="Select target device"
+                    />
                   </div>
                 </div>
 
@@ -576,40 +734,56 @@ function App() {
                 {/* Energy table */}
                 <Card>
                   <CardContent className="pt-6">
-                    {energyLoading ? (
-                      <FlexColumn spacing={2}>
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Skeleton key={i} className="h-10 w-full" />
-                        ))}
-                      </FlexColumn>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Device</TableHead>
-                            <TableHead className="text-right">Online (kWh)</TableHead>
-                            <TableHead className="text-right">Idle (kWh)</TableHead>
-                            <TableHead className="text-right">Offline (kWh)</TableHead>
-                            <TableHead className="text-right">Total (kWh)</TableHead>
-                            <TableHead className="text-right">Waste (÷ {divisor})</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {enrichedEnergy.map((e) => (
-                            <TableRow key={e.deviceid}>
-                              <TableCell className="font-medium">{e.nickname}</TableCell>
-                              <TableCell className="text-right">{e.energy.online?.toFixed(2) ?? '—'}</TableCell>
-                              <TableCell className="text-right">{e.energy.idle?.toFixed(2) ?? '—'}</TableCell>
-                              <TableCell className="text-right">{e.energy.offline?.toFixed(2) ?? '—'}</TableCell>
-                              <TableCell className="text-right">{e.energy.total?.toFixed(2) ?? '—'}</TableCell>
-                              <TableCell className="text-right font-semibold text-primary">
-                                {e.wasteValue?.toFixed(4) ?? '—'}
-                              </TableCell>
-                            </TableRow>
+                    <FlexColumn spacing={3}>
+                      <div className="max-w-sm">
+                        <SearchInput
+                          placeholder="Search devices..."
+                          value={energySearch}
+                          onChange={(e) => setEnergySearch(e.target.value)}
+                          onClear={() => setEnergySearch('')}
+                        />
+                      </div>
+                      {energyLoading ? (
+                        <FlexColumn spacing={2}>
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Skeleton key={i} className="h-10 w-full" />
                           ))}
-                        </TableBody>
-                      </Table>
-                    )}
+                        </FlexColumn>
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <SortableHead label="Device" columnId="nickname" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} />
+                              <SortableHead label="Online (kWh)" columnId="online" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
+                              <SortableHead label="Idle (kWh)" columnId="idle" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
+                              <SortableHead label="Offline (kWh)" columnId="offline" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
+                              <SortableHead label="Total (kWh)" columnId="total" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
+                              <SortableHead label={`Waste (÷ ${divisor})`} columnId="waste" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {displayedEnergy.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                                  {energySearch ? 'No devices match your search.' : 'No energy data for this date.'}
+                                </TableCell>
+                              </TableRow>
+                            ) : displayedEnergy.map((e) => (
+                              <TableRow key={e.deviceid}>
+                                <TableCell className="font-medium">{e.nickname}</TableCell>
+                                <TableCell className="text-right">{e.energy.online?.toFixed(2) ?? '—'}</TableCell>
+                                <TableCell className="text-right">{e.energy.idle?.toFixed(2) ?? '—'}</TableCell>
+                                <TableCell className="text-right">{e.energy.offline?.toFixed(2) ?? '—'}</TableCell>
+                                <TableCell className="text-right">{e.energy.total?.toFixed(2) ?? '—'}</TableCell>
+                                <TableCell className="text-right font-semibold text-primary">
+                                  {e.wasteValue?.toFixed(4) ?? '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </FlexColumn>
                   </CardContent>
                 </Card>
               </FlexColumn>
@@ -632,22 +806,37 @@ function App() {
                       No production entries created yet.
                     </p>
                   ) : (
-                    <Table>
+                    <FlexColumn spacing={3}>
+                      <div className="max-w-sm">
+                        <SearchInput
+                          placeholder="Search by device name..."
+                          value={historySearch}
+                          onChange={(e) => setHistorySearch(e.target.value)}
+                          onClear={() => setHistorySearch('')}
+                        />
+                      </div>
+                      <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Source Device</TableHead>
-                          <TableHead>Target Device</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead className="text-right">Energy (kWh)</TableHead>
-                          <TableHead className="text-right">Divisor</TableHead>
-                          <TableHead className="text-right">Waste</TableHead>
+                          <SortableHead label="Source Device" columnId="source" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
+                          <SortableHead label="Target Device" columnId="target" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
+                          <SortableHead label="Date" columnId="date" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
+                          <SortableHead label="Energy (kWh)" columnId="energy" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
+                          <SortableHead label="Divisor" columnId="divisor" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
+                          <SortableHead label="Waste" columnId="waste" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
                           <TableHead>Rounding</TableHead>
-                          <TableHead>Created</TableHead>
+                          <SortableHead label="Created" columnId="created" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
                           <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {storedEntries.map((entry) => (
+                        {displayedHistory.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-6">
+                              No entries match your search.
+                            </TableCell>
+                          </TableRow>
+                        ) : displayedHistory.map((entry) => (
                           <TableRow key={entry.id}>
                             <TableCell className="font-medium">
                               {deviceName(entry.source_device_id)}
@@ -685,6 +874,7 @@ function App() {
                         ))}
                       </TableBody>
                     </Table>
+                    </FlexColumn>
                   )}
                 </CardContent>
               </Card>
@@ -705,33 +895,21 @@ function App() {
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                           <Label className="mb-1.5 block text-sm">Energy source device</Label>
-                          <Select value={schedSourceDevice} onValueChange={setSchedSourceDevice}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Pull energy from..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {devices.map((d) => (
-                                <SelectItem key={d.deviceid} value={d.deviceid}>
-                                  {d.nickname || d.deviceid}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <DevicePicker
+                            devices={devices}
+                            value={schedSourceDevice}
+                            onChange={setSchedSourceDevice}
+                            placeholder="Pull energy from..."
+                          />
                         </div>
                         <div>
                           <Label className="mb-1.5 block text-sm">Target device for production entry</Label>
-                          <Select value={schedTargetDevice} onValueChange={setSchedTargetDevice}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Create entry for..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {devices.map((d) => (
-                                <SelectItem key={d.deviceid} value={d.deviceid}>
-                                  {d.nickname || d.deviceid}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <DevicePicker
+                            devices={devices}
+                            value={schedTargetDevice}
+                            onChange={setSchedTargetDevice}
+                            placeholder="Create entry for..."
+                          />
                         </div>
                       </div>
 

@@ -3,26 +3,35 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "node server.js & vite",
     "dev:client": "vite",
     "dev:server": "node server.js",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
+    "typecheck": "tsc -b",
+    "start": "node server.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@guidewheel/ui": "file:../../../../.guidewheel/ui",
+    "@guidewheel/ui": "file:./vendor/guidewheel-ui",
     "cors": "^2.8.6",
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.2",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "posthog-js": "^1.367.0",
     "react": "^19.2.4",
+    "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@rolldown/binding-linux-x64-gnu": "^1.0.0-rc.15",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

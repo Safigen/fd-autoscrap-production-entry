@@ -1,0 +1,344 @@
+{
+  "name": "@guidewheel/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": "22.x"
+  },
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./accordion": {
+      "import": "./dist/accordion/index.js",
+      "types": "./dist/accordion/index.d.ts"
+    },
+    "./alert-dialog": {
+      "import": "./dist/alert-dialog/index.js",
+      "types": "./dist/alert-dialog/index.d.ts"
+    },
+    "./app-bar": {
+      "import": "./dist/app-bar/index.js",
+      "types": "./dist/app-bar/index.d.ts"
+    },
+    "./assets": {
+      "import": "./dist/assets/index.js",
+      "types": "./dist/assets/index.d.ts"
+    },
+    "./avatar": {
+      "import": "./dist/avatar/index.js",
+      "types": "./dist/avatar/index.d.ts"
+    },
+    "./badge": {
+      "import": "./dist/badge/index.js",
+      "types": "./dist/badge/index.d.ts"
+    },
+    "./banner": {
+      "import": "./dist/banner/index.js",
+      "types": "./dist/banner/index.d.ts"
+    },
+    "./breadcrumb": {
+      "import": "./dist/breadcrumb/index.js",
+      "types": "./dist/breadcrumb/index.d.ts"
+    },
+    "./button": {
+      "import": "./dist/button/index.js",
+      "types": "./dist/button/index.d.ts"
+    },
+    "./card": {
+      "import": "./dist/card/index.js",
+      "types": "./dist/card/index.d.ts"
+    },
+    "./card-list": {
+      "import": "./dist/card-list/index.js",
+      "types": "./dist/card-list/index.d.ts"
+    },
+    "./chart": {
+      "import": "./dist/chart/index.js",
+      "types": "./dist/chart/index.d.ts"
+    },
+    "./checkbox": {
+      "import": "./dist/checkbox/index.js",
+      "types": "./dist/checkbox/index.d.ts"
+    },
+    "./chip": {
+      "import": "./dist/chip/index.js",
+      "types": "./dist/chip/index.d.ts"
+    },
+    "./comment-thread": {
+      "import": "./dist/comment-thread/index.js",
+      "types": "./dist/comment-thread/index.d.ts"
+    },
+    "./data-table": {
+      "import": "./dist/data-table/index.js",
+      "types": "./dist/data-table/index.d.ts"
+    },
+    "./date-picker": {
+      "import": "./dist/date-picker/index.js",
+      "types": "./dist/date-picker/index.d.ts"
+    },
+    "./date-range-picker": {
+      "import": "./dist/date-range-picker/index.js",
+      "types": "./dist/date-range-picker/index.d.ts"
+    },
+    "./device-select": {
+      "import": "./dist/device-select/index.js",
+      "types": "./dist/device-select/index.d.ts"
+    },
+    "./dialog": {
+      "import": "./dist/dialog/index.js",
+      "types": "./dist/dialog/index.d.ts"
+    },
+    "./drawer": {
+      "import": "./dist/drawer/index.js",
+      "types": "./dist/drawer/index.d.ts"
+    },
+    "./dropdown-menu": {
+      "import": "./dist/dropdown-menu/index.js",
+      "types": "./dist/dropdown-menu/index.d.ts"
+    },
+    "./empty-state": {
+      "import": "./dist/empty-state/index.js",
+      "types": "./dist/empty-state/index.d.ts"
+    },
+    "./expandable-search": {
+      "import": "./dist/expandable-search/index.js",
+      "types": "./dist/expandable-search/index.d.ts"
+    },
+    "./field": {
+      "import": "./dist/field/index.js",
+      "types": "./dist/field/index.d.ts"
+    },
+    "./filter-bar": {
+      "import": "./dist/filter-bar/index.js",
+      "types": "./dist/filter-bar/index.d.ts"
+    },
+    "./filter-trigger": {
+      "import": "./dist/filter-trigger/index.js",
+      "types": "./dist/filter-trigger/index.d.ts"
+    },
+    "./icons": {
+      "import": "./dist/icons/index.js",
+      "types": "./dist/icons/index.d.ts"
+    },
+    "./input": {
+      "import": "./dist/input/index.js",
+      "types": "./dist/input/index.d.ts"
+    },
+    "./label": {
+      "import": "./dist/label/index.js",
+      "types": "./dist/label/index.d.ts"
+    },
+    "./layout": {
+      "import": "./dist/layout/index.js",
+      "types": "./dist/layout/index.d.ts"
+    },
+    "./link": {
+      "import": "./dist/link/index.js",
+      "types": "./dist/link/index.d.ts"
+    },
+    "./live-mode-button": {
+      "import": "./dist/live-mode-button/index.js",
+      "types": "./dist/live-mode-button/index.d.ts"
+    },
+    "./menu": {
+      "import": "./dist/menu/index.js",
+      "types": "./dist/menu/index.d.ts"
+    },
+    "./metric-card": {
+      "import": "./dist/metric-card/index.js",
+      "types": "./dist/metric-card/index.d.ts"
+    },
+    "./metric-tile": {
+      "import": "./dist/metric-tile/index.js",
+      "types": "./dist/metric-tile/index.d.ts"
+    },
+    "./navigation-sidebar": {
+      "import": "./dist/navigation-sidebar/index.js",
+      "types": "./dist/navigation-sidebar/index.d.ts"
+    },
+    "./overlay": {
+      "import": "./dist/overlay/index.js",
+      "types": "./dist/overlay/index.d.ts"
+    },
+    "./pagination": {
+      "import": "./dist/pagination/index.js",
+      "types": "./dist/pagination/index.d.ts"
+    },
+    "./popover": {
+      "import": "./dist/popover/index.js",
+      "types": "./dist/popover/index.d.ts"
+    },
+    "./progress": {
+      "import": "./dist/progress/index.js",
+      "types": "./dist/progress/index.d.ts"
+    },
+    "./radio-group": {
+      "import": "./dist/radio-group/index.js",
+      "types": "./dist/radio-group/index.d.ts"
+    },
+    "./scrollbox": {
+      "import": "./dist/scrollbox/index.js",
+      "types": "./dist/scrollbox/index.d.ts"
+    },
+    "./search-input": {
+      "import": "./dist/search-input/index.js",
+      "types": "./dist/search-input/index.d.ts"
+    },
+    "./select": {
+      "import": "./dist/select/index.js",
+      "types": "./dist/select/index.d.ts"
+    },
+    "./separator": {
+      "import": "./dist/separator/index.js",
+      "types": "./dist/separator/index.d.ts"
+    },
+    "./skeleton": {
+      "import": "./dist/skeleton/index.js",
+      "types": "./dist/skeleton/index.d.ts"
+    },
+    "./status-indicator": {
+      "import": "./dist/status-indicator/index.js",
+      "types": "./dist/status-indicator/index.d.ts"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./switch": {
+      "import": "./dist/switch/index.js",
+      "types": "./dist/switch/index.d.ts"
+    },
+    "./table": {
+      "import": "./dist/table/index.js",
+      "types": "./dist/table/index.d.ts"
+    },
+    "./tabs": {
+      "import": "./dist/tabs/index.js",
+      "types": "./dist/tabs/index.d.ts"
+    },
+    "./tailwind-preset": {
+      "import": "./dist/tailwind.preset.js",
+      "types": "./dist/tailwind.preset.d.ts"
+    },
+    "./textarea": {
+      "import": "./dist/textarea/index.js",
+      "types": "./dist/textarea/index.d.ts"
+    },
+    "./tile": {
+      "import": "./dist/tile/index.js",
+      "types": "./dist/tile/index.d.ts"
+    },
+    "./time-segment": {
+      "import": "./dist/time-segment/index.js",
+      "types": "./dist/time-segment/index.d.ts"
+    },
+    "./toaster": {
+      "import": "./dist/toaster/index.js",
+      "types": "./dist/toaster/index.d.ts"
+    },
+    "./toggle": {
+      "import": "./dist/toggle/index.js",
+      "types": "./dist/toggle/index.d.ts"
+    },
+    "./tokens": "./dist/tokens/index.css",
+    "./tooltip": {
+      "import": "./dist/tooltip/index.js",
+      "types": "./dist/tooltip/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "vite build && npm run build:types",
+    "build:types": "tsc --project tsconfig.build.json",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "typecheck": "tsc --noEmit",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "tailwindcss": "^3.4.0"
+  },
+  "dependencies": {
+    "@radix-ui/react-accordion": "^1.2.12",
+    "@radix-ui/react-alert-dialog": "^1.1.15",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-portal": "^1.1.10",
+    "@radix-ui/react-progress": "^1.1.8",
+    "@radix-ui/react-radio-group": "^1.3.8",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slider": "^1.3.6",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toggle": "^1.1.10",
+    "@radix-ui/react-toggle-group": "^1.1.11",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.6",
+    "react-day-picker": "^9.14.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@storybook/addon-docs": "^10.0.8",
+    "@storybook/react-vite": "^10.0.8",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^25.3.3",
+    "@types/react": "^19.1.11",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/coverage-v8": "^4.0.15",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.30.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-storybook": "^10.0.8",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.5.2",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.11",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "storybook": "^10.2.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3",
+    "vite": "^6.4.1",
+    "vitest": "^4.0.15",
+    "vitest-axe": "^0.1.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Guidewheel/guidewheel-ui.git"
+  },
+  "volta": {
+    "node": "22.14.0"
+  }
+}

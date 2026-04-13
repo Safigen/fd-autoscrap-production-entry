@@ -1,0 +1,1 @@
+{"version":3,"file":"ScrollBox.d.ts","sourceRoot":"","sources":["../../../src/scrollbox/ScrollBox.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,KAAK,MAAM,OAAO,CAAC;AAI/B;;GAEG;AACH,QAAA,MAAM,SAAS,GAAI,mCAIhB,KAAK,CAAC,cAAc,CAAC,KAAK,CAAC,4CAY7B,CAAC;AAEF;;GAEG;AACH,QAAA,MAAM,wBAAwB,GAAI,mCAI/B,KAAK,CAAC,cAAc,CAAC,KAAK,CAAC,4CAe7B,CAAC;AAEF,OAAO,EAAE,SAAS,EAAE,wBAAwB,EAAE,CAAC"}

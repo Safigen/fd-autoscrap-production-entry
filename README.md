@@ -1,73 +1,39 @@
-# React + TypeScript + Vite
+# fd-autoscrap-production-entry
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## 1. Goal
 
-Currently, two official plugins are available:
+Create automated waste entries for a sensor that measures waste units created.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 2. Description of functionality (observed)
 
-## React Compiler
+A forward-deploy prototype that lets an internal user:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Authenticate** via a shared site password → JWT (7-day expiry).
+- **Browse devices and daily energy** fetched from SAFI (`/v1/devices`, `/v1/devices/energy`) for Pelican, scoped to a date the user picks (past days only).
+- **Create a production entry** manually by choosing: source device (energy), target device (entry), date, divisor, and rounding. Energy ÷ divisor = waste. Calls `POST /v1/production-entries`.
+- **Review history** of entries *created from this app* (IDs tracked in `localStorage`, re-read via `GET /v1/production-entries/{id}`).
+- **Define schedules** (source → target, frequency, time, rounding) — stored locally only; no runner executes them yet.
+- **Set a default divisor** in a Settings tab (persisted to `localStorage`).
 
-## Expanding the ESLint configuration
+## 3. Data points
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Dimension | Status |
+|---|---|
+| **Storage** | No database. Server persists schedules to a local JSON file (`schedules.json`) — note Railway's filesystem is ephemeral. Client stores JWT, user email, created-entry metadata, and settings in `localStorage`. No new DB is being spun up. |
+| **PII** | User email is collected on first load and sent to PostHog via `identify()` for product analytics. No other personal data. |
+| **Guidewheel API** | Does **not** use the Guidewheel API. Uses the SAFI API (`staging.api.safisense.com`) — both **read** (`GET /devices`, `GET /devices/energy`, `GET /production-entries/{id}`) and **write** (`POST /production-entries`). |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 4. Other known risks / FYIs
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- **Shared site password**, not per-user auth. Rate limiting needed on `/api/verify`.
+- **JWT secret** currently derived from the site password — replace with a dedicated high-entropy `JWT_SECRET` env var before production.
+- **Schedules** are defined in the UI but no background worker runs them. Either wire up a scheduler or remove the UI before shipping.
+- **Banner text** ("Prototype — not connected to production data") is misleading because the app hits SAFI staging with real Pelican device names.
+- **Client-supplied time ranges** on SAFI proxy endpoints are not bounded server-side (≤ 31 days recommended).
+- **CORS is reflective** (`origin: true`) and should be pinned to the Railway production origin.
+- **No security headers** (helmet) yet; no CSRF token (mitigated by Bearer-in-header, not cookie).
+- **No logout button** yet — clearing localStorage is the only way to sign out.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+---
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+_This README is regenerated by the `gw-security-review` skill; update Section 1 (Goal) manually and let subsequent reviews edit the rest as functionality evolves._

@@ -248,6 +248,11 @@
       "types": "./dist/toggle/index.d.ts"
     },
     "./tokens": "./dist/tokens/index.css",
+    "./tailwind.preset": {
+      "import": "./dist/tailwind.preset.js",
+      "require": "./dist/tailwind.preset.js",
+      "default": "./dist/tailwind.preset.js"
+    },
     "./tooltip": {
       "import": "./dist/tooltip/index.js",
       "types": "./dist/tooltip/index.d.ts"

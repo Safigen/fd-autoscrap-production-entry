@@ -1,6 +1,6 @@
 import { jsx as e, jsxs as r, Fragment as m } from "react/jsx-runtime";
 import { useMemo as u } from "react";
-import { cva as p } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as p } from "class-variance-authority";
 import g from "../icons/CancelIcon.js";
 import { Label as x } from "../label/Label.js";
 import h from "../separator/Separator.js";

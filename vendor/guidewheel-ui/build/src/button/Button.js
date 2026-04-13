@@ -1,5 +1,5 @@
 import { jsx as t, jsxs as p, Fragment as u } from "react/jsx-runtime";
-import { Root as g } from "../../node_modules/@radix-ui/react-slot/dist/index.js";
+import { Root as g } from "@radix-ui/react-slot";
 import { IconProvider as v } from "../icons/common/IconContext.js";
 import x from "../icons/LoadingIcon.js";
 import { cn as b } from "../utils/cn.js";

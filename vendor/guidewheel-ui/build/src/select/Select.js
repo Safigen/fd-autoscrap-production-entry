@@ -1,5 +1,5 @@
 import { jsx as t, jsxs as s } from "react/jsx-runtime";
-import { Root as l, Portal as d, Content as i, Viewport as c, Group as u, Item as m, ItemIndicator as f, ItemText as p, Label as g, Separator as h, Trigger as b, Icon as x, Value as w } from "../../node_modules/@radix-ui/react-select/dist/index.js";
+import { Root as l, Portal as d, Content as i, Viewport as c, Group as u, Item as m, ItemIndicator as f, ItemText as p, Label as g, Separator as h, Trigger as b, Icon as x, Value as w } from "@radix-ui/react-select";
 import y from "../icons/CheckIcon.js";
 import S from "../icons/ChevronDownIcon.js";
 import { cn as o } from "../utils/cn.js";

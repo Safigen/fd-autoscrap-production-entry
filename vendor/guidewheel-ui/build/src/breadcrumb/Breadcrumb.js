@@ -1,5 +1,5 @@
 import { jsx as a, jsxs as o } from "react/jsx-runtime";
-import { Root as s } from "../../node_modules/@radix-ui/react-slot/dist/index.js";
+import { Root as s } from "@radix-ui/react-slot";
 import i from "../icons/MoreHorizontalIcon.js";
 import { linkVariants as l } from "../link/common/variants.js";
 import { cn as t } from "../utils/cn.js";

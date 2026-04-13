@@ -1,6 +1,6 @@
 import { jsx as s } from "react/jsx-runtime";
-import { Root as i, Indicator as l } from "../../node_modules/@radix-ui/react-progress/dist/index.js";
-import { cva as d } from "../../node_modules/class-variance-authority/dist/index.js";
+import { Root as i, Indicator as l } from "@radix-ui/react-progress";
+import { cva as d } from "class-variance-authority";
 import { cn as a } from "../utils/cn.js";
 const m = d(
   "relative w-full overflow-hidden rounded-full bg-surface",

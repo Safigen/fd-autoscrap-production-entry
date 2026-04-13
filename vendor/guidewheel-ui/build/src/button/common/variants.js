@@ -1,4 +1,4 @@
-import { cva as e } from "../../../node_modules/class-variance-authority/dist/index.js";
+import { cva as e } from "class-variance-authority";
 const t = [
   "inline-flex items-center justify-center gap-1",
   "whitespace-nowrap rounded-[3px] border font-medium",

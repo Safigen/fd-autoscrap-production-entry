@@ -1,5 +1,5 @@
 import { jsx as t, jsxs as r } from "react/jsx-runtime";
-import { Root as l, CheckboxItem as m, ItemIndicator as d, Portal as s, Content as c, Item as p, Label as f, RadioGroup as b, RadioItem as g, Separator as w, Sub as x, SubContent as h, SubTrigger as I, Trigger as N } from "../../node_modules/@radix-ui/react-dropdown-menu/dist/index.js";
+import { Root as l, CheckboxItem as m, ItemIndicator as d, Portal as s, Content as c, Item as p, Label as f, RadioGroup as b, RadioItem as g, Separator as w, Sub as x, SubContent as h, SubTrigger as I, Trigger as N } from "@radix-ui/react-dropdown-menu";
 import i from "../icons/CheckIcon.js";
 import D from "../icons/ChevronRightIcon.js";
 import { cn as n } from "../utils/cn.js";

@@ -1,4 +1,4 @@
-import { cva as i } from "../../../node_modules/class-variance-authority/dist/index.js";
+import { cva as i } from "class-variance-authority";
 const n = i([
   "rounded-sm text-link underline transition-colors",
   "hover:text-link-hover",

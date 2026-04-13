@@ -1,6 +1,6 @@
 import { jsx as r } from "react/jsx-runtime";
-import { Root as o } from "../../node_modules/@radix-ui/react-label/dist/index.js";
-import { cva as l } from "../../node_modules/class-variance-authority/dist/index.js";
+import { Root as o } from "@radix-ui/react-label";
+import { cva as l } from "class-variance-authority";
 import { cn as n } from "../utils/cn.js";
 const s = l(
   [

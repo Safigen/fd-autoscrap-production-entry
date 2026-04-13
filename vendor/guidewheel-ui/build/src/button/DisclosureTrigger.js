@@ -1,5 +1,5 @@
 import { jsxs as n, jsx as r } from "react/jsx-runtime";
-import { cva as c } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as c } from "class-variance-authority";
 import d from "../icons/ChevronDownIcon.js";
 import { cn as a } from "../utils/cn.js";
 import { Button as g } from "./Button.js";

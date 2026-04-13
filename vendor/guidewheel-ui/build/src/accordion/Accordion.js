@@ -1,5 +1,5 @@
 import { jsx as o, jsxs as a } from "react/jsx-runtime";
-import { Root as i, Content as c, Item as s, Header as d, Trigger as m } from "../../node_modules/@radix-ui/react-accordion/dist/index.js";
+import { Root as i, Content as c, Item as s, Header as d, Trigger as m } from "@radix-ui/react-accordion";
 import l from "../icons/ChevronDownIcon.js";
 import { cn as r } from "../utils/cn.js";
 function x({

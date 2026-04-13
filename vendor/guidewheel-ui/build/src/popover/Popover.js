@@ -1,5 +1,5 @@
 import { jsx as t } from "react/jsx-runtime";
-import { Root as n, Anchor as i, Portal as d, Content as s, Trigger as p } from "../../node_modules/@radix-ui/react-popover/dist/index.js";
+import { Root as n, Anchor as i, Portal as d, Content as s, Trigger as p } from "@radix-ui/react-popover";
 import { cn as c } from "../utils/cn.js";
 function u({
   ...o

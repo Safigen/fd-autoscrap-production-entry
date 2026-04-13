@@ -1,5 +1,5 @@
 import { jsx as o } from "react/jsx-runtime";
-import { Root as a, Item as t, Indicator as s } from "../../node_modules/@radix-ui/react-radio-group/dist/index.js";
+import { Root as a, Item as t, Indicator as s } from "@radix-ui/react-radio-group";
 import { cn as i } from "../utils/cn.js";
 function u({
   className: r,

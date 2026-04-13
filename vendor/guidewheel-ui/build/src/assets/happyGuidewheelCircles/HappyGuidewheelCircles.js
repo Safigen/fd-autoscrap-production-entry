@@ -1,5 +1,5 @@
 import { jsxs as t, jsx as c } from "react/jsx-runtime";
-import { clsx as r } from "../../../node_modules/clsx/dist/clsx.js";
+import { clsx as r } from "clsx";
 import e from "./HappyGuidewheelCircles.module.css.js";
 function a(s) {
   return /* @__PURE__ */ t(

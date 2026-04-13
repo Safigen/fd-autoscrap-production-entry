@@ -1,6 +1,6 @@
 import { jsx as e, jsxs as o } from "react/jsx-runtime";
-import { Root as d, Close as s, Content as l, Description as c, Overlay as f, Portal as u, Title as m, Trigger as p } from "../../node_modules/@radix-ui/react-dialog/dist/index.js";
-import { cva as g } from "../../node_modules/class-variance-authority/dist/index.js";
+import { Root as d, Close as s, Content as l, Description as c, Overlay as f, Portal as u, Title as m, Trigger as p } from "@radix-ui/react-dialog";
+import { cva as g } from "class-variance-authority";
 import w from "../icons/CloseIcon.js";
 import { cn as r } from "../utils/cn.js";
 function T({

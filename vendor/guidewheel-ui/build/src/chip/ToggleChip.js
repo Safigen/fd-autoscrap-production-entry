@@ -1,5 +1,5 @@
 import { jsx as a } from "react/jsx-runtime";
-import { cva as e } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as e } from "class-variance-authority";
 import { cn as n } from "../utils/cn.js";
 import { Chip as p } from "./Chip.js";
 const i = e([

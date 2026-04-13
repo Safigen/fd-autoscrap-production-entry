@@ -1,8 +1,8 @@
 import { jsx as i } from "react/jsx-runtime";
 import * as s from "react";
 import { useMemo as p } from "react";
-import { Root as c, Item as d } from "../../node_modules/@radix-ui/react-toggle-group/dist/index.js";
-import { cva as f } from "../../node_modules/class-variance-authority/dist/index.js";
+import { Root as c, Item as d } from "@radix-ui/react-toggle-group";
+import { cva as f } from "class-variance-authority";
 import { cn as l } from "../utils/cn.js";
 import { spacingLength as v } from "../utils/tw3-compat.js";
 import { toggleVariants as x } from "./common/variants.js";

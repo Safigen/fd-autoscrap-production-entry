@@ -4,7 +4,7 @@ import { Button as p } from "../button/Button.js";
 import x from "../icons/CalendarIcon.js";
 import { Popover as y, PopoverTrigger as h, PopoverContent as b } from "../popover/Popover.js";
 import { cn as i } from "../utils/cn.js";
-import { DayPicker as v } from "../../node_modules/react-day-picker/dist/esm/DayPicker.js";
+import { DayPicker as v } from "react-day-picker";
 const w = {
   root: "text-foreground",
   months: "flex gap-4",

@@ -1,6 +1,6 @@
 import { jsx as e } from "react/jsx-runtime";
-import { Root as n, Thumb as o } from "../../node_modules/@radix-ui/react-switch/dist/index.js";
-import { cva as s } from "../../node_modules/class-variance-authority/dist/index.js";
+import { Root as n, Thumb as o } from "@radix-ui/react-switch";
+import { cva as s } from "class-variance-authority";
 import { cn as a } from "../utils/cn.js";
 const c = s(
   [

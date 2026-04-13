@@ -1,5 +1,5 @@
 import { jsx as a, jsxs as l } from "react/jsx-runtime";
-import { Root as s, Close as n, Content as d, Description as c, Overlay as g, Portal as u, Title as f, Trigger as m } from "../../node_modules/@radix-ui/react-dialog/dist/index.js";
+import { Root as s, Close as n, Content as d, Description as c, Overlay as g, Portal as u, Title as f, Trigger as m } from "@radix-ui/react-dialog";
 import p from "../icons/CloseIcon.js";
 import { cn as e } from "../utils/cn.js";
 function v({

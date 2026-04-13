@@ -1,7 +1,7 @@
 import { jsx as r } from "react/jsx-runtime";
-import { Portal as o } from "../../node_modules/@radix-ui/react-portal/dist/index.js";
-import { cva as a } from "../../node_modules/class-variance-authority/dist/index.js";
-import { Toaster as c } from "../../node_modules/sonner/dist/index.js";
+import { Portal as o } from "@radix-ui/react-portal";
+import { cva as a } from "class-variance-authority";
+import { Toaster as c } from "sonner";
 import n from "../icons/CancelIcon.js";
 import i from "../icons/CheckIcon.js";
 import m from "../icons/CloseIcon.js";

@@ -1,5 +1,5 @@
 import { jsx as i } from "react/jsx-runtime";
-import { Root as n } from "../../node_modules/@radix-ui/react-separator/dist/index.js";
+import { Root as n } from "@radix-ui/react-separator";
 import { cn as e } from "../utils/cn.js";
 function f({
   className: t,

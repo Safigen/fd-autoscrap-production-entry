@@ -1,5 +1,5 @@
 import { jsx as r } from "react/jsx-runtime";
-import { cva as o } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as o } from "class-variance-authority";
 import { cn as d } from "../utils/cn.js";
 const e = o("shrink-0", {
   variants: {

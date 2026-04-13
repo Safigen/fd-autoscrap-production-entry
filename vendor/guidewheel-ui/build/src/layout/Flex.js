@@ -1,6 +1,6 @@
 import { jsx as r } from "react/jsx-runtime";
-import { Root as l } from "../../node_modules/@radix-ui/react-slot/dist/index.js";
-import { cva as m } from "../../node_modules/class-variance-authority/dist/index.js";
+import { Root as l } from "@radix-ui/react-slot";
+import { cva as m } from "class-variance-authority";
 import { cn as a } from "../utils/cn.js";
 import { spacingLength as f } from "../utils/tw3-compat.js";
 const p = m("flex gap-[var(--gap)]", {

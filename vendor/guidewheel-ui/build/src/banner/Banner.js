@@ -1,6 +1,6 @@
 import { jsxs as d, jsx as a } from "react/jsx-runtime";
 import { useState as l } from "react";
-import { cva as b } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as b } from "class-variance-authority";
 import m from "../icons/CloseIcon.js";
 import { cn as p } from "../utils/cn.js";
 const u = b(

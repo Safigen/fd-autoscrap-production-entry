@@ -1,5 +1,5 @@
 import { jsx as i } from "react/jsx-runtime";
-import { cva as l } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as l } from "class-variance-authority";
 import { cn as a } from "../utils/cn.js";
 const n = l(
   "flex flex-col items-center justify-center rounded border bg-card",

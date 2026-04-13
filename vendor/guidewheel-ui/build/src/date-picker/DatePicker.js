@@ -4,7 +4,7 @@ import { Button as c } from "../button/Button.js";
 import p from "../icons/CalendarIcon.js";
 import { Popover as x, PopoverTrigger as g, PopoverContent as h } from "../popover/Popover.js";
 import { cn as a } from "../utils/cn.js";
-import { DayPicker as y } from "../../node_modules/react-day-picker/dist/esm/DayPicker.js";
+import { DayPicker as y } from "react-day-picker";
 function _({
   selected: t,
   onSelect: r,

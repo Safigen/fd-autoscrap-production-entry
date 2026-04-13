@@ -1,5 +1,5 @@
 import { jsxs as o, jsx as e } from "react/jsx-runtime";
-import { cva as b } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as b } from "class-variance-authority";
 import { Card as h, CardHeader as x, CardTitle as g, CardContent as i } from "../card/Card.js";
 import { MetricTile as v } from "../metric-tile/MetricTile.js";
 import { StatusIndicator as N } from "../status-indicator/StatusIndicator.js";

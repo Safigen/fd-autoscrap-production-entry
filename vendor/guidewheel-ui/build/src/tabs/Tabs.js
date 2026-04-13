@@ -1,5 +1,5 @@
 import { jsx as r } from "react/jsx-runtime";
-import { Root as o, Content as s, List as n, Trigger as a } from "../../node_modules/@radix-ui/react-tabs/dist/index.js";
+import { Root as o, Content as s, List as n, Trigger as a } from "@radix-ui/react-tabs";
 import { cn as i } from "../utils/cn.js";
 function l({
   className: t,

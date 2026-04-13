@@ -5,7 +5,7 @@ import "../../node_modules/echarts/index.js";
 import { cn as u } from "../utils/cn.js";
 import { Skeleton as c } from "../skeleton/Skeleton.js";
 import { guidewheelChartTheme as d } from "./chart-theme.js";
-import { registerTheme as p } from "../../node_modules/echarts/lib/core/echarts.js";
+import { registerTheme as p } from "echarts";
 const o = "guidewheel";
 let r = !1;
 function g() {

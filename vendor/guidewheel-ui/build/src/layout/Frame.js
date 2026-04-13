@@ -1,5 +1,5 @@
 import { jsx as e } from "react/jsx-runtime";
-import { cva as t } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as t } from "class-variance-authority";
 import { cn as m } from "../utils/cn.js";
 import { Box as n } from "./Box.js";
 const c = t("rounded border p-3", {

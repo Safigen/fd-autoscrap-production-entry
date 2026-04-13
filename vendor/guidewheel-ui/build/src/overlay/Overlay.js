@@ -1,5 +1,5 @@
 import { jsx as a } from "react/jsx-runtime";
-import { Portal as n } from "../../node_modules/@radix-ui/react-portal/dist/index.js";
+import { Portal as n } from "@radix-ui/react-portal";
 import { cn as r } from "../utils/cn.js";
 function d({ className: e, open: t = !1, ...o }) {
   return t ? /* @__PURE__ */ a(n, { children: /* @__PURE__ */ a(

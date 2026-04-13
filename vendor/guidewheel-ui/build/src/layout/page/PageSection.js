@@ -1,5 +1,5 @@
 import { jsx as t } from "react/jsx-runtime";
-import { cva as n } from "../../../node_modules/class-variance-authority/dist/index.js";
+import { cva as n } from "class-variance-authority";
 import { cn as c } from "../../utils/cn.js";
 const i = n("flex flex-col rounded", {
   variants: {

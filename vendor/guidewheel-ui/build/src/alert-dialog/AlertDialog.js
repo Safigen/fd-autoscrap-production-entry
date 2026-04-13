@@ -1,5 +1,5 @@
 import { jsx as e, jsxs as i } from "react/jsx-runtime";
-import { Root as s, Action as d, Cancel as c, Content as g, Description as u, Overlay as f, Portal as m, Title as p, Trigger as x } from "../../node_modules/@radix-ui/react-alert-dialog/dist/index.js";
+import { Root as s, Action as d, Cancel as c, Content as g, Description as u, Overlay as f, Portal as m, Title as p, Trigger as x } from "@radix-ui/react-alert-dialog";
 import { solidButtonVariants as n } from "../button/common/variants.js";
 import { cn as o } from "../utils/cn.js";
 function T({

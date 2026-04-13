@@ -1,4 +1,4 @@
-import { cva as s } from "../../../node_modules/class-variance-authority/dist/index.js";
+import { cva as s } from "class-variance-authority";
 const e = s("", {
   variants: {
     size: {

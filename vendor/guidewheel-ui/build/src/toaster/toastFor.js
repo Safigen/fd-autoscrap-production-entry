@@ -1,4 +1,4 @@
-import { toast as c } from "../../node_modules/sonner/dist/index.js";
+import { toast as c } from "sonner";
 const e = (s) => ({
   /**
    * Show a success toast in the specified toaster.

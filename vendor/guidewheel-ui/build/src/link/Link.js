@@ -1,5 +1,5 @@
 import { jsx as m } from "react/jsx-runtime";
-import { Root as n } from "../../node_modules/@radix-ui/react-slot/dist/index.js";
+import { Root as n } from "@radix-ui/react-slot";
 import { cn as i } from "../utils/cn.js";
 import { linkVariants as a } from "./common/variants.js";
 function e({

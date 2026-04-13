@@ -1,5 +1,5 @@
 import { jsx as o } from "react/jsx-runtime";
-import { cva as s } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as s } from "class-variance-authority";
 import { cn as d } from "../utils/cn.js";
 const i = s("inline-flex items-center rounded-full font-medium", {
   variants: {

@@ -1,5 +1,5 @@
 import { jsx as r, jsxs as g } from "react/jsx-runtime";
-import { cva as f } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as f } from "class-variance-authority";
 import { EmptyState as u, EmptyStateTitle as h, EmptyStateDescription as p } from "../empty-state/EmptyState.js";
 import { Skeleton as v } from "../skeleton/Skeleton.js";
 import { cn as o } from "../utils/cn.js";

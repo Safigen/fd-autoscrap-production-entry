@@ -1,5 +1,5 @@
 import { jsx as o } from "react/jsx-runtime";
-import { cva as l } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as l } from "class-variance-authority";
 import { cn as s } from "../utils/cn.js";
 const d = l("inline-block h-full", {
   variants: {

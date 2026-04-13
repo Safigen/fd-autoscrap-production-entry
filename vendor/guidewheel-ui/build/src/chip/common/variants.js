@@ -1,5 +1,5 @@
-import { cva as r } from "../../../node_modules/class-variance-authority/dist/index.js";
-import { clsx as e } from "../../../node_modules/clsx/dist/clsx.js";
+import { cva as r } from "class-variance-authority";
+import { clsx as e } from "clsx";
 const a = r(
   e(
     "inline-flex w-fit shrink-0 items-center justify-center gap-1 px-2 py-1",

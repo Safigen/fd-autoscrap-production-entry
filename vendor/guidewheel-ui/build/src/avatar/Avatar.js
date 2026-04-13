@@ -1,5 +1,5 @@
 import { jsx as s } from "react/jsx-runtime";
-import { cva as m } from "../../node_modules/class-variance-authority/dist/index.js";
+import { cva as m } from "class-variance-authority";
 import { useState as c } from "react";
 import { cn as f } from "../utils/cn.js";
 const n = m(

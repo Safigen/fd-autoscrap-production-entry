@@ -1,5 +1,5 @@
 import { jsx as o } from "react/jsx-runtime";
-import { Root as n, Arrow as d, Portal as l, Content as s, Provider as f, Trigger as p } from "../../node_modules/@radix-ui/react-tooltip/dist/index.js";
+import { Root as n, Arrow as d, Portal as l, Content as s, Provider as f, Trigger as p } from "@radix-ui/react-tooltip";
 import { cn as e } from "../utils/cn.js";
 function c({
   delayDuration: t = 0,

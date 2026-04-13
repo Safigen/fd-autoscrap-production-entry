@@ -1,5 +1,5 @@
 import { jsx as r } from "react/jsx-runtime";
-import { Root as m } from "../../node_modules/@radix-ui/react-toggle/dist/index.js";
+import { Root as m } from "@radix-ui/react-toggle";
 import g from "../icons/CheckIcon.js";
 import s from "../icons/IndeterminateCheckIcon.js";
 import { cn as n } from "../utils/cn.js";

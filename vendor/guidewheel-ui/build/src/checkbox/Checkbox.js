@@ -1,7 +1,7 @@
 import { jsx as e } from "react/jsx-runtime";
-import { Checkbox as n, CheckboxIndicator as d } from "../../node_modules/@radix-ui/react-checkbox/dist/index.js";
-import { cva as s } from "../../node_modules/class-variance-authority/dist/index.js";
-import { clsx as i } from "../../node_modules/clsx/dist/clsx.js";
+import { Checkbox as n, CheckboxIndicator as d } from "@radix-ui/react-checkbox";
+import { cva as s } from "class-variance-authority";
+import { clsx as i } from "clsx";
 import m from "../icons/CheckIcon.js";
 import l from "../icons/IndeterminateCheckIcon.js";
 import { cn as p } from "../utils/cn.js";

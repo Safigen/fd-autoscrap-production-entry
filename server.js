@@ -181,6 +181,8 @@ app.post('/api/production-entries', requireAuth, async (req, res) => {
       device_id,
       from_ts: from_ts < 1e12 ? from_ts * 1000 : from_ts,
       to_ts: to_ts < 1e12 ? to_ts * 1000 : to_ts,
+      // Send production.produced = 0 so Guidewheel doesn't auto-calculate it.
+      production: { produced: 0 },
     };
     // Forward the waste block if provided.
     if (waste && typeof waste === 'object' && waste.wasted != null) {

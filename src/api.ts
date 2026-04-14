@@ -129,12 +129,17 @@ export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceE
 export async function createProductionEntry(
   deviceId: string,
   fromTs: number,
-  toTs: number
+  toTs: number,
+  wasteValue?: number | null,
 ): Promise<ProductionEntry> {
+  const body: Record<string, unknown> = { device_id: deviceId, from_ts: fromTs, to_ts: toTs };
+  if (wasteValue != null) {
+    body.waste = { wasted: wasteValue };
+  }
   const res = await fetch(`${API_URL}/api/production-entries`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ device_id: deviceId, from_ts: fromTs, to_ts: toTs }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('Failed to create production entry');
   return res.json();

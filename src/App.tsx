@@ -328,7 +328,7 @@ function App() {
     setCreatingEntry(true);
     try {
       const range = getDayRange(selectedDate);
-      const entry = await createProductionEntry(targetDeviceId, range.fromUnix, range.toUnix);
+      const entry = await createProductionEntry(targetDeviceId, range.fromUnix, range.toUnix, wastePreview);
       const createdEntry: CreatedEntry = {
         id: entry.id,
         source_device_id: sourceDeviceId,

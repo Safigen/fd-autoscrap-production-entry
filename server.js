@@ -169,13 +169,23 @@ app.get('/api/devices/energy', requireAuth, async (req, res) => {
 });
 
 app.post('/api/production-entries', requireAuth, async (req, res) => {
-  const { device_id, from_ts, to_ts } = req.body;
+  const { device_id, from_ts, to_ts, waste } = req.body;
   if (!device_id || typeof device_id !== 'string' || from_ts == null || to_ts == null) {
     return res.status(400).json({ error: 'device_id, from_ts, and to_ts are required' });
   }
   const rangeError = validateTimeRange(from_ts, to_ts, { unit: 'unix' });
   if (rangeError) return res.status(400).json({ error: rangeError });
   try {
+    // Convert seconds to ms if needed — SAFI staging expects milliseconds.
+    const safiBody = {
+      device_id,
+      from_ts: from_ts < 1e12 ? from_ts * 1000 : from_ts,
+      to_ts: to_ts < 1e12 ? to_ts * 1000 : to_ts,
+    };
+    // Forward the waste block if provided.
+    if (waste && typeof waste === 'object' && waste.wasted != null) {
+      safiBody.waste = { wasted: Number(waste.wasted) };
+    }
     const response = await fetch(
       `${SAFI_API_URL}/production-entries?company_id=${COMPANY_ID}`,
       {
@@ -184,12 +194,7 @@ app.post('/api/production-entries', requireAuth, async (req, res) => {
           'api-key': SAFI_API_KEY,
           'Content-Type': 'application/json',
         },
-        // Convert seconds to ms if needed — SAFI staging expects milliseconds.
-        body: JSON.stringify({
-          device_id,
-          from_ts: from_ts < 1e12 ? from_ts * 1000 : from_ts,
-          to_ts: to_ts < 1e12 ? to_ts * 1000 : to_ts,
-        }),
+        body: JSON.stringify(safiBody),
       }
     );
     const data = await response.json();

@@ -330,13 +330,8 @@ function App() {
       const range = getDayRange(selectedDate);
       const result = await createProductionEntry(targetDeviceId, range.fromUnix, range.toUnix, wastePreview);
 
-      if (!result.ok) {
-        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`);
-        return;
-      }
-
       const createdEntry: CreatedEntry = {
-        id: result.data!.id,
+        id: result.data?.id ?? `local-${Date.now()}`,
         source_device_id: sourceDeviceId,
         target_device_id: targetDeviceId,
         from_ts: range.fromUnix,
@@ -346,11 +341,18 @@ function App() {
         divisor,
         rounding,
         created_at: new Date().toISOString(),
-        api_response: result.data!,
+        api_response: result.data,
+        api_status: result.status,
+        api_error: result.error,
       };
       storeEntry(createdEntry);
       setStoredEntries(getStoredEntries());
-      toastFor(TOASTER_ID).success(`Production entry created (${result.status}).`);
+
+      if (result.ok) {
+        toastFor(TOASTER_ID).success(`Production entry created (${result.status}).`);
+      } else {
+        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`);
+      }
     } catch {
       toastFor(TOASTER_ID).error('Failed to connect to server.');
     } finally {
@@ -869,12 +871,21 @@ function App() {
                               {new Date(entry.created_at).toLocaleString()}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="success">
-                                <FlexRow spacing={1} className="items-center">
-                                  <CheckIcon size="xs" />
-                                  {entry.api_response?.status || 'created'}
-                                </FlexRow>
-                              </Badge>
+                              {entry.api_error ? (
+                                <Badge variant="danger">
+                                  <FlexRow spacing={1} className="items-center">
+                                    <AlertTriangleIcon size="xs" />
+                                    {entry.api_status ?? 'err'}: {entry.api_error}
+                                  </FlexRow>
+                                </Badge>
+                              ) : (
+                                <Badge variant="success">
+                                  <FlexRow spacing={1} className="items-center">
+                                    <CheckIcon size="xs" />
+                                    {entry.api_status ?? ''} {entry.api_response?.status || 'created'}
+                                  </FlexRow>
+                                </Badge>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}

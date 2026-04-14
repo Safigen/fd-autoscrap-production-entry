@@ -52,7 +52,11 @@ export interface CreatedEntry {
   divisor: number;
   rounding: string;
   created_at: string;
-  api_response: ProductionEntry;
+  api_response: ProductionEntry | null;
+  /** HTTP status from SAFI (201 = created, 409 = duplicate, etc.) */
+  api_status?: number;
+  /** Error message from SAFI when the request failed */
+  api_error?: string | null;
 }
 
 // --- Settings persistence ---

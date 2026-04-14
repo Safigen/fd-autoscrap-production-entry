@@ -233,7 +233,7 @@ function App() {
   const [targetDeviceId, setTargetDeviceId] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(getYesterday());
   const [divisor, setDivisor] = useState(defaultDivisor);
-  const [rounding, setRounding] = useState<'none' | 'integer' | 'one_decimal' | 'two_decimals'>('none');
+  const [rounding, setRounding] = useState<'none' | 'integer' | 'one_decimal' | 'two_decimals'>('integer');
   const [creatingEntry, setCreatingEntry] = useState(false);
   const [previewEnergy, setPreviewEnergy] = useState<number | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -254,7 +254,7 @@ function App() {
   const [schedFrequency, setSchedFrequency] = useState<'daily' | 'weekly'>('daily');
   const [schedTime, setSchedTime] = useState('06:00');
   const [schedDivisor, setSchedDivisor] = useState<number>(defaultDivisor);
-  const [schedRounding, setSchedRounding] = useState<'none' | 'integer' | 'one_decimal' | 'two_decimals'>('none');
+  const [schedRounding, setSchedRounding] = useState<'none' | 'integer' | 'one_decimal' | 'two_decimals'>('integer');
   const [creatingSched, setCreatingSched] = useState(false);
 
   // Settings tab
@@ -267,8 +267,8 @@ function App() {
 
   // History table controls
   const [historySearch, setHistorySearch] = useState('');
-  const [historySortBy, setHistorySortBy] = useState<string>('source');
-  const [historySortDir, setHistorySortDir] = useState<SortDir>('asc');
+  const [historySortBy, setHistorySortBy] = useState<string>('created');
+  const [historySortDir, setHistorySortDir] = useState<SortDir>('desc');
 
   // Load devices on mount
   useEffect(() => {
@@ -826,6 +826,7 @@ function App() {
                       <Table>
                       <TableHeader>
                         <TableRow>
+                          <SortableHead label="Created" columnId="created" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
                           <SortableHead label="Source Device" columnId="source" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
                           <SortableHead label="Target Device" columnId="target" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
                           <SortableHead label="Date" columnId="date" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
@@ -833,7 +834,6 @@ function App() {
                           <SortableHead label="Divisor" columnId="divisor" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
                           <SortableHead label="Waste" columnId="waste" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
                           <TableHead>Rounding</TableHead>
-                          <SortableHead label="Created" columnId="created" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
                           <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -846,6 +846,9 @@ function App() {
                           </TableRow>
                         ) : displayedHistory.map((entry) => (
                           <TableRow key={entry.id}>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {new Date(entry.created_at).toLocaleString()}
+                            </TableCell>
                             <TableCell className="font-medium">
                               {deviceName(entry.source_device_id)}
                             </TableCell>
@@ -866,9 +869,6 @@ function App() {
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {formatRounding(entry.rounding)}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {new Date(entry.created_at).toLocaleString()}
                             </TableCell>
                             <TableCell>
                               {entry.api_error ? (

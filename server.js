@@ -181,10 +181,8 @@ app.post('/api/production-entries', requireAuth, async (req, res) => {
       device_id,
       from_ts: from_ts < 1e12 ? from_ts * 1000 : from_ts,
       to_ts: to_ts < 1e12 ? to_ts * 1000 : to_ts,
-      // SAFI accepts production_qty / waste_qty as top-level fields.
-      production_qty: 0,
     };
-    // Forward waste quantity if provided.
+    // SAFI accepts waste_qty / production_qty as top-level fields.
     if (waste && typeof waste === 'object' && waste.wasted != null) {
       safiBody.waste_qty = Number(waste.wasted);
     }

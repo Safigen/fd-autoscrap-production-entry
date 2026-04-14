@@ -181,12 +181,12 @@ app.post('/api/production-entries', requireAuth, async (req, res) => {
       device_id,
       from_ts: from_ts < 1e12 ? from_ts * 1000 : from_ts,
       to_ts: to_ts < 1e12 ? to_ts * 1000 : to_ts,
-      // Send production.produced = 0 so Guidewheel doesn't auto-calculate it.
-      production: { produced: 0 },
+      // SAFI accepts production_qty / waste_qty as top-level fields.
+      production_qty: 0,
     };
-    // Forward the waste block if provided.
+    // Forward waste quantity if provided.
     if (waste && typeof waste === 'object' && waste.wasted != null) {
-      safiBody.waste = { wasted: Number(waste.wasted) };
+      safiBody.waste_qty = Number(waste.wasted);
     }
     const response = await fetch(
       `${SAFI_API_URL}/production-entries?company_id=${COMPANY_ID}`,

@@ -27,7 +27,7 @@ import {
   fetchDevices, fetchEnergy, createProductionEntry,
   fetchSchedules, createSchedule, updateSchedule, deleteSchedule,
   getStoredEntries, storeEntry, getSettings, saveSettings,
-  type Device, type DeviceEnergy, type Schedule, type CreatedEntry,
+  type Device, type DeviceEnergy, type Schedule, type CreatedEntry, type CreateEntryResult,
 } from './api';
 
 const TOASTER_ID = 'main-toaster';
@@ -328,9 +328,15 @@ function App() {
     setCreatingEntry(true);
     try {
       const range = getDayRange(selectedDate);
-      const entry = await createProductionEntry(targetDeviceId, range.fromUnix, range.toUnix, wastePreview);
+      const result = await createProductionEntry(targetDeviceId, range.fromUnix, range.toUnix, wastePreview);
+
+      if (!result.ok) {
+        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`);
+        return;
+      }
+
       const createdEntry: CreatedEntry = {
-        id: entry.id,
+        id: result.data!.id,
         source_device_id: sourceDeviceId,
         target_device_id: targetDeviceId,
         from_ts: range.fromUnix,
@@ -340,13 +346,13 @@ function App() {
         divisor,
         rounding,
         created_at: new Date().toISOString(),
-        api_response: entry,
+        api_response: result.data!,
       };
       storeEntry(createdEntry);
       setStoredEntries(getStoredEntries());
-      toastFor(TOASTER_ID).success('Production entry created!');
+      toastFor(TOASTER_ID).success(`Production entry created (${result.status}).`);
     } catch {
-      toastFor(TOASTER_ID).error('Failed to create production entry.');
+      toastFor(TOASTER_ID).error('Failed to connect to server.');
     } finally {
       setCreatingEntry(false);
     }

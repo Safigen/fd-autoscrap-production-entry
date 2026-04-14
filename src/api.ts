@@ -126,12 +126,19 @@ export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceE
   return res.json();
 }
 
+export interface CreateEntryResult {
+  ok: boolean;
+  status: number;
+  data: ProductionEntry | null;
+  error: string | null;
+}
+
 export async function createProductionEntry(
   deviceId: string,
   fromTs: number,
   toTs: number,
   wasteValue?: number | null,
-): Promise<ProductionEntry> {
+): Promise<CreateEntryResult> {
   const body: Record<string, unknown> = { device_id: deviceId, from_ts: fromTs, to_ts: toTs };
   if (wasteValue != null) {
     body.waste = { wasted: wasteValue };
@@ -141,8 +148,13 @@ export async function createProductionEntry(
     headers: authHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to create production entry');
-  return res.json();
+  const json = await res.json();
+  if (res.ok) {
+    return { ok: true, status: res.status, data: json, error: null };
+  }
+  // SAFI returns { statusCode, message, error? }
+  const msg = json.message || json.error || `Request failed (${res.status})`;
+  return { ok: false, status: res.status, data: null, error: msg };
 }
 
 export async function fetchProductionEntry(id: string): Promise<ProductionEntry> {

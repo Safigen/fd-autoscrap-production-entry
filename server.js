@@ -198,7 +198,8 @@ app.post('/api/production-entries', requireAuth, async (req, res) => {
       }
     );
     const data = await response.json();
-    return res.json(data);
+    // Forward the SAFI status code so the client sees 201, 409, 422, etc.
+    return res.status(response.status).json(data);
   } catch (err) {
     return res.status(502).json({ error: 'Failed to create production entry' });
   }

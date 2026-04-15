@@ -439,6 +439,32 @@ async function executeSchedule(
 // --- Hono routes ---
 
 export default function customServer(app: Hono): void {
+  // --- Request logger ---
+  // Logs every request with path, whether it carried a launch_token, whether the
+  // fd_session cookie was present, and the final response status. This lets us
+  // diagnose the iframe launch flow: dataViz opens /?launch_token=XYZ → fd-app
+  // middleware exchanges it with dataProxy → sets fd_session cookie → 302 redirects
+  // to /. If the cookie fails to persist (third-party cookie block in iframe) we
+  // see back-to-back launches with no cookie on the second request.
+  app.use('*', async (c, next) => {
+    const url = new URL(c.req.url)
+    const hasLaunchToken = url.searchParams.has('launch_token')
+    const cookieHeader = c.req.header('cookie') ?? ''
+    const hasSession = cookieHeader.includes('fd_session=')
+    const referer = c.req.header('referer') ?? '-'
+    const proto = c.req.header('x-forwarded-proto') ?? 'http'
+    await next()
+    // Skip noisy static-asset + healthz hits unless the request carried a launch_token.
+    const path = url.pathname
+    const isAsset = path.startsWith('/assets/') || path === '/favicon.ico' || path === '/healthz'
+    if (isAsset && !hasLaunchToken) return
+    const setCookieHdr = c.res.headers.get('set-cookie') ?? ''
+    const setSession = setCookieHdr.includes('fd_session=') ? 'set' : '-'
+    console.log(
+      `[req] ${c.req.method} ${path} status=${c.res.status} launch=${hasLaunchToken ? 'yes' : 'no'} session=${hasSession ? 'yes' : 'no'} setCookie=${setSession} proto=${proto} ref=${referer.slice(0, 80)}`,
+    )
+  })
+
   // --- Dev-only bypass routes (read-only device + energy via api-key) ---
   // These exist so local devs can hit real SAFI staging data without a
   // Guidewheel-issued session access token. Guarded by FD_DEV_BYPASS env var

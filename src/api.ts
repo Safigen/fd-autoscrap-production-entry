@@ -160,11 +160,19 @@ export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceE
   return data.data ?? data;
 }
 
+export interface OverlapConflict {
+  id: string;
+  from_ts: number;
+  to_ts: number;
+}
+
 export interface CreateEntryResult {
   ok: boolean;
   status: number;
   data: ProductionEntry | null;
   error: string | null;
+  conflicts?: OverlapConflict[];
+  timezone?: string;
 }
 
 export interface EntryLeg {
@@ -207,7 +215,14 @@ export async function createProductionEntry(
     return { ok: true, status: res.status, data: json, error: null };
   }
   const msg = json.message || json.error || `Request failed (${res.status})`;
-  return { ok: false, status: res.status, data: null, error: msg };
+  return {
+    ok: false,
+    status: res.status,
+    data: null,
+    error: msg,
+    conflicts: Array.isArray(json.conflicts) ? (json.conflicts as OverlapConflict[]) : undefined,
+    timezone: typeof json.timezone === 'string' ? json.timezone : undefined,
+  };
 }
 
 export async function fetchProductionEntry(id: string): Promise<ProductionEntry> {
@@ -286,6 +301,8 @@ export interface ScheduleRunResult {
   waste_energy?: number | null;
   waste_value?: number | null;
   error?: string | null;
+  conflicts?: OverlapConflict[];
+  timezone?: string;
 }
 
 export async function runScheduleNow(id: string): Promise<ScheduleRunResult> {

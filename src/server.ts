@@ -340,7 +340,7 @@ function computeSourceValue(rows: EnergyRow[], src: SourceConfig | null): { ener
 
 async function executeSchedule(
   schedule: Schedule,
-): Promise<{ skipped?: boolean; reason?: string; status?: number; entry_id?: string | null; production_energy?: number | null; production_value?: number | null; waste_energy?: number | null; waste_value?: number | null; error?: string | null }> {
+): Promise<{ skipped?: boolean; reason?: string; status?: number; entry_id?: string | null; production_energy?: number | null; production_value?: number | null; waste_energy?: number | null; waste_value?: number | null; error?: string | null; conflicts?: OverlapConflict[]; timezone?: string }> {
   const { id: scheduleId, target_device_id, production_source, waste_source, timezone } = schedule
   const tz = timezone || DEFAULT_TIMEZONE
   const { fromMs, toMs } = getYesterdayRangeMs(tz)
@@ -369,6 +369,7 @@ async function executeSchedule(
   let createRes: { status: number; ok: boolean }
   let createData: { id?: string; message?: string }
   let historyError: string | null = null
+  let conflicts: OverlapConflict[] = []
   if (DEMO_MODE) {
     createRes = { status: 201, ok: true }
     createData = { id: `demo-sched-${randomUUID()}` }
@@ -385,10 +386,9 @@ async function executeSchedule(
     // On 409, enrich the error with the existing overlapping entries so the
     // Run Now UI can show which entries are blocking.
     if (res.status === 409) {
-      const overlaps = await fetchOverlappingEntries(target_device_id, fromMs, toMs)
-      if (overlaps.length > 0) {
-        historyError = `${overlaps.length} overlapping entry(ies) on device`
-        createData.message = `${createData.message || 'Duplicate entry'} — ${overlaps.length} existing entry(ies) overlap this window: ${formatOverlapSummary(overlaps, tz)}`
+      conflicts = await fetchOverlappingEntries(target_device_id, fromMs, toMs)
+      if (conflicts.length > 0) {
+        historyError = `${conflicts.length} overlapping entry(ies) on device`
       }
     }
   }
@@ -401,6 +401,8 @@ async function executeSchedule(
     waste_energy: waste.energy,
     waste_value: waste.value,
     error: createRes.ok ? null : (createData.message || `HTTP ${createRes.status}`),
+    conflicts: conflicts.length > 0 ? conflicts : undefined,
+    timezone: tz,
   }
 
   appendHistoryEntry({
@@ -583,9 +585,9 @@ export default function customServer(app: Hono): void {
         if (res.status === 409) {
           const overlaps = await fetchOverlappingEntries(device_id, fromMs, toMs)
           data.conflicts = overlaps
+          ;(data as Record<string, unknown>).timezone = manualTz
           if (overlaps.length > 0) {
             historyError = `${overlaps.length} overlapping entry(ies) on device`
-            data.message = `${data.message || 'Duplicate entry'} — ${overlaps.length} existing entry(ies) overlap this window: ${formatOverlapSummary(overlaps, manualTz)}`
           }
         }
       }

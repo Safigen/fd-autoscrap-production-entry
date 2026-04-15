@@ -32,10 +32,70 @@ import {
   getSettings, saveSettings,
   TIMEZONE_OPTIONS, DEFAULT_TIMEZONE,
   type Device, type DeviceEnergy, type Schedule, type SourceConfig, type UploadHistoryEntry,
-  type TimezoneValue, type Rounding,
+  type TimezoneValue, type Rounding, type OverlapConflict,
 } from './api';
 
 const TOASTER_ID = 'main-toaster';
+
+function formatConflictTs(ms: number, tz: string): string {
+  try {
+    return new Date(ms).toLocaleString('en-US', {
+      timeZone: tz,
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return new Date(ms).toISOString();
+  }
+}
+
+// Build a toast body that renders the SAFI 409 overlap listing as a compact
+// table instead of a wall of semicolons. Falls back to the plain-text error
+// when the server didn't return structured conflicts.
+function buildSafiErrorToast(
+  status: number,
+  error: string,
+  conflicts?: OverlapConflict[],
+  tz?: string,
+): React.ReactNode {
+  if (!conflicts || conflicts.length === 0) {
+    return `SAFI error (${status}): ${error}`;
+  }
+  const zone = tz || DEFAULT_TIMEZONE;
+  // Strip the text overlap list from the error message — we're about to render
+  // it as a proper table, so the inline dump is redundant.
+  const shortError = error.split(' — ')[0] || error;
+  return (
+    <div className="flex flex-col gap-2">
+      <div>SAFI error ({status}): {shortError}</div>
+      <div className="text-sm">
+        {conflicts.length} existing entry{conflicts.length === 1 ? '' : 's'} overlap this window:
+      </div>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="border-b border-danger-700/40">
+            <th className="py-1 pr-2 text-left font-medium">ID</th>
+            <th className="py-1 pr-2 text-left font-medium">Start</th>
+            <th className="py-1 text-left font-medium">End</th>
+          </tr>
+        </thead>
+        <tbody>
+          {conflicts.map((c, i) => (
+            <tr key={`${c.id}-${i}`} className="border-b border-danger-700/20 last:border-b-0">
+              <td className="py-1 pr-2 font-mono">{String(c.id).slice(0, 8)}</td>
+              <td className="py-1 pr-2">{formatConflictTs(c.from_ts, zone)}</td>
+              <td className="py-1">{formatConflictTs(c.to_ts, zone)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function applyRounding(value: number, rounding: Rounding): number {
   switch (rounding) {
@@ -615,10 +675,10 @@ function App() {
         toastFor(TOASTER_ID).success(`Production entry created (${result.status}).`);
         loadUploadHistory();
       } else {
-        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`, {
-          duration: Infinity,
-          closeButton: true,
-        });
+        toastFor(TOASTER_ID).error(
+          buildSafiErrorToast(result.status, result.error ?? 'Request failed', result.conflicts, result.timezone),
+          { duration: Infinity, closeButton: true },
+        );
         loadUploadHistory();
       }
     } catch {
@@ -812,10 +872,10 @@ function App() {
       if (result.skipped) {
         toastFor(TOASTER_ID).error(`Skipped: ${result.reason === 'no_energy_data' ? 'No energy data for source device(s)' : result.reason}`);
       } else if (result.error) {
-        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`, {
-          duration: Infinity,
-          closeButton: true,
-        });
+        toastFor(TOASTER_ID).error(
+          buildSafiErrorToast(result.status ?? 0, result.error, result.conflicts, result.timezone),
+          { duration: Infinity, closeButton: true },
+        );
       } else {
         const parts: string[] = [];
         if (result.production_value != null) parts.push(`production=${result.production_value}`);

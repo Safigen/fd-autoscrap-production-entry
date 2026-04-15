@@ -26,3 +26,4 @@ dist-ssr
 .env
 schedules.json
 .claude/
+upload_history.json

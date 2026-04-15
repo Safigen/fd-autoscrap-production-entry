@@ -1,4 +1,9 @@
 // fd-app serves everything on the same origin — auth is handled via session cookies.
+// Device/energy reads go through the framework's /api/safi/* proxy, which forwards
+// the session's access token to SAFI as a Bearer. Write endpoints (schedules,
+// production entries, history) are this app's own custom Hono routes in server.ts.
+import { safiApi } from '@safi_ai/fd-app';
+
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
 // Demo mode short-circuits SAFI calls so the UI is exercisable without live data.
@@ -126,12 +131,18 @@ export interface Schedule {
 
 export async function fetchDevices(): Promise<Device[]> {
   if (DEMO_MODE) return DEMO_DEVICES;
-  // /api/fleet/* is our own proxy that injects company_id from the session;
-  // /api/dev/* is the local-only bypass that uses SAFI_API_KEY directly.
-  const res = await fetch(DEV_BYPASS ? '/api/dev/devices' : '/api/fleet/devices');
-  if (!res.ok) throw new Error('Failed to fetch devices');
-  const data = await res.json();
-  return data.data ?? data;
+  // DEV_BYPASS still hits the api-key-backed /api/dev/* routes for local dev
+  // without a real Guidewheel session. In prod, reads go through the
+  // framework's /api/safi/* proxy which uses the session Bearer token.
+  if (DEV_BYPASS) {
+    const res = await fetch('/api/dev/devices');
+    if (!res.ok) throw new Error('Failed to fetch devices');
+    const data = await res.json();
+    return data.data ?? data;
+  }
+  // safiApi.getDevices() returns fd-app's Device shape — structurally compatible
+  // with our local Device interface (deviceid, nickname, status).
+  return (await safiApi.getDevices()) as unknown as Device[];
 }
 
 export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceEnergy[]> {
@@ -152,12 +163,17 @@ export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceE
       };
     });
   }
-  const params = new URLSearchParams({ from_ts: String(fromMs), to_ts: String(toMs), group_by: 'day' });
-  const url = DEV_BYPASS ? `/api/dev/devices/energy?${params}` : `/api/fleet/devices/energy?${params}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Failed to fetch energy data');
-  const data = await res.json();
-  return data.data ?? data;
+  if (DEV_BYPASS) {
+    const params = new URLSearchParams({ from_ts: String(fromMs), to_ts: String(toMs), group_by: 'day' });
+    const res = await fetch(`/api/dev/devices/energy?${params}`);
+    if (!res.ok) throw new Error('Failed to fetch energy data');
+    const data = await res.json();
+    return data.data ?? data;
+  }
+  const data = await safiApi.getDevicesEnergy({ from_ts: fromMs, to_ts: toMs, group_by: 'day' });
+  // fd-app's DeviceEnergyData uses number for fromts/tots; our local type accepts
+  // string (legacy SAFI ISO format). The shape is otherwise identical.
+  return data as unknown as DeviceEnergy[];
 }
 
 export interface OverlapConflict {

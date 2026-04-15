@@ -35,6 +35,26 @@ import {
   type TimezoneValue, type Rounding, type OverlapConflict,
 } from './api';
 
+// --- Client-side diagnostic beacons (logged server-side as /api/debug/*) ---
+// These let us trace the SPA lifecycle from Railway logs without needing browser
+// dev tools. Iframe reload loops can kill the JS before /api/session fires, so
+// we mark each phase (module load, first render, first effect) separately.
+function beacon(stage: string, extra?: Record<string, unknown>) {
+  try {
+    const body = JSON.stringify({ stage, t: Date.now(), ...(extra || {}) });
+    // Use sendBeacon so the report flushes even if the iframe is about to navigate.
+    if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
+      navigator.sendBeacon('/api/debug/trace', body);
+    } else {
+      fetch('/api/debug/trace', { method: 'POST', body, keepalive: true }).catch(() => {});
+    }
+  } catch {
+    // Never throw from a diagnostic beacon.
+  }
+}
+
+beacon('module_load', { ua: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : 'n/a' });
+
 const TOASTER_ID = 'main-toaster';
 
 function formatConflictTs(ms: number, tz: string): string {
@@ -473,19 +493,42 @@ function SourceSection({
   );
 }
 
-posthog.init('phc_QIgbD8nFuxMwPrURQbXJxKqI1uEwrmWrnorrr5v1oto', {
-  api_host: 'https://us.i.posthog.com',
-  persistence: 'localStorage',
-});
+// PostHog initialization is deferred to useEffect so that any failures
+// (e.g., partitioned localStorage in a cross-site iframe) don't prevent the
+// app from rendering. Previously this ran at module load, which blocked React
+// from even starting if PostHog threw.
+let posthogInitialized = false;
+function initPostHogOnce() {
+  if (posthogInitialized) return;
+  posthogInitialized = true;
+  try {
+    posthog.init('phc_QIgbD8nFuxMwPrURQbXJxKqI1uEwrmWrnorrr5v1oto', {
+      api_host: 'https://us.i.posthog.com',
+      persistence: 'localStorage',
+    });
+  } catch (err) {
+    beacon('posthog_init_error', { err: String(err).slice(0, 200) });
+  }
+}
 
 function App() {
+  beacon('app_render');
   const session = useFdSession();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    beacon('app_mounted');
+    initPostHogOnce();
+  }, []);
+
+  useEffect(() => {
     if (session?.username) {
-      posthog.identify(session.username);
+      try {
+        posthog.identify(session.username);
+      } catch {
+        // ignore
+      }
     }
   }, [session?.username]);
 

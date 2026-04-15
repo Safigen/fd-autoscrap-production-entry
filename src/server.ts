@@ -247,28 +247,25 @@ interface OverlapConflict { id: unknown; from_ts: number; to_ts: number }
 
 // Look up SAFI production entries on a device that overlap [fromMs, toMs].
 // Used to enrich 409 "duplicate entry" responses with the actual culprits.
-// If `accessToken` is supplied, uses Bearer auth (user-session path); otherwise
-// falls back to the server-side api-key (scheduler path).
+// Uses api-key auth — SAFI staging doesn't accept Bearer tokens.
 async function fetchOverlappingEntries(
   deviceId: string,
   fromMs: number,
   toMs: number,
-  accessToken?: string,
 ): Promise<OverlapConflict[]> {
   if (DEMO_MODE) return []
-  if (!accessToken && !SAFI_API_KEY) return []
+  if (!SAFI_API_KEY) return []
   const lookbackDays = 2
   const lookaheadDays = 2
+  // SAFI staging doesn't accept Bearer tokens yet — use api-key + company_id
+  // for all SAFI calls (same as fetchDevices / fetchEnergy).
   const qs = new URLSearchParams({
     device_id: deviceId,
     from_ts: String(fromMs - lookbackDays * 86_400_000),
     to_ts: String(toMs + lookaheadDays * 86_400_000),
+    company_id: COMPANY_ID ?? '',
   })
-  // Bearer auth derives company from the JWT; api-key requires explicit company_id.
-  const headers: Record<string, string> = accessToken
-    ? { Authorization: `Bearer ${accessToken}` }
-    : { 'api-key': SAFI_API_KEY! }
-  if (!accessToken) qs.set('company_id', COMPANY_ID ?? '')
+  const headers = { 'api-key': SAFI_API_KEY }
   try {
     const res = await fetch(`${SAFI_API_URL}/production-entries?${qs}`, { headers })
     if (!res.ok) return []
@@ -453,55 +450,90 @@ export default function customServer(app: Hono): void {
     const hasSession = cookieHeader.includes('fd_session=')
     const referer = c.req.header('referer') ?? '-'
     const proto = c.req.header('x-forwarded-proto') ?? 'http'
+    const secFetchDest = c.req.header('sec-fetch-dest') ?? '-'
+    const secFetchMode = c.req.header('sec-fetch-mode') ?? '-'
+    const secFetchSite = c.req.header('sec-fetch-site') ?? '-'
     await next()
-    // Skip noisy static-asset + healthz hits unless the request carried a launch_token.
+    // Skip only favicon + healthz to keep logs actionable. We want to see assets.
     const path = url.pathname
-    const isAsset = path.startsWith('/assets/') || path === '/favicon.ico' || path === '/healthz'
-    if (isAsset && !hasLaunchToken) return
+    if (path === '/favicon.ico' || path === '/healthz') return
     const setCookieHdr = c.res.headers.get('set-cookie') ?? ''
     const setSession = setCookieHdr.includes('fd_session=') ? 'set' : '-'
     console.log(
-      `[req] ${c.req.method} ${path} status=${c.res.status} launch=${hasLaunchToken ? 'yes' : 'no'} session=${hasSession ? 'yes' : 'no'} setCookie=${setSession} proto=${proto} ref=${referer.slice(0, 80)}`,
+      `[req] ${c.req.method} ${path} status=${c.res.status} launch=${hasLaunchToken ? 'yes' : 'no'} session=${hasSession ? 'yes' : 'no'} setCookie=${setSession} proto=${proto} dest=${secFetchDest} mode=${secFetchMode} site=${secFetchSite} ref=${referer.slice(0, 80)}`,
     )
   })
 
-  // --- Dev-only bypass routes (read-only device + energy via api-key) ---
-  // These exist so local devs can hit real SAFI staging data without a
-  // Guidewheel-issued session access token. Guarded by FD_DEV_BYPASS env var
-  // so they never register in prod.
-  if (DEV_BYPASS) {
-    console.log('[server] FD_DEV_BYPASS=true — exposing /api/dev/devices and /api/dev/devices/energy (api-key auth)')
-    const devHeaders = () => ({ 'api-key': SAFI_API_KEY ?? '' })
-    app.get('/api/dev/devices', async (c: Context) => {
-      try {
-        const url = `${SAFI_API_URL}/devices?company_id=${COMPANY_ID}`
-        const res = await fetch(url, { headers: devHeaders() })
-        const data = await res.json() as unknown
-        return c.json(data as Record<string, unknown>, res.status as 200)
-      } catch (err) {
-        return c.json({ error: (err as Error).message }, 502)
-      }
-    })
-    app.get('/api/dev/devices/energy', async (c: Context) => {
-      const qs = new URLSearchParams(c.req.query() as Record<string, string>)
-      qs.set('company_id', COMPANY_ID ?? '')
-      try {
-        const url = `${SAFI_API_URL}/devices/energy?${qs.toString()}`
-        const res = await fetch(url, { headers: devHeaders() })
-        const data = await res.json() as unknown
-        return c.json(data as Record<string, unknown>, res.status as 200)
-      } catch (err) {
-        return c.json({ error: (err as Error).message }, 502)
-      }
-    })
-  }
+  // --- Client diagnostic trace endpoint ---
+  // The SPA posts beacons here to trace its lifecycle (module load, render,
+  // mount). Useful when the iframe is being torn down before the app can make
+  // a normal API call like /api/session, so we can see how far the JS got.
+  app.post('/api/debug/trace', async (c: Context) => {
+    try {
+      const text = await c.req.text()
+      console.log(`[client-trace] ${text.slice(0, 300)}`)
+    } catch (err) {
+      console.log(`[client-trace] parse-error: ${(err as Error).message}`)
+    }
+    return c.body(null, 204)
+  })
 
-  // NOTE: The old /api/fleet/* proxy (api-key auth) has been removed. Client
-  // reads now go through the framework's /api/safi/* proxy which forwards the
-  // session's Bearer access token — see @safi_ai/fd-app's safiProxyHandler.
-  // SAFI now accepts Bearer tokens (previously required api-key), so the
-  // custom proxy is no longer needed. The /api/dev/* routes above remain for
-  // local dev only when FD_DEV_BYPASS is set.
+  // --- SAFI device/energy proxy (api-key auth) ---
+  // SAFI staging's read endpoints don't accept JWT Bearer tokens yet — they
+  // return 401 "No API key found in request" which causes the fd-app client
+  // helper to fire bridge.notifySessionExpired() and re-launch the iframe
+  // (causing an infinite reload loop). Until SAFI accepts Bearer auth
+  // everywhere, we route client reads through these custom routes that use
+  // the server-side SAFI_API_KEY + company_id.
+  //
+  // The framework's /api/safi/* proxy (Bearer auth) is still registered for
+  // endpoints that may already accept JWT, but our client uses these api-key
+  // routes for devices + energy.
+  const safiHeaders = () => ({ 'api-key': SAFI_API_KEY ?? '' })
+  app.get('/api/devices', async (c: Context) => {
+    if (DEMO_MODE) return c.json({ data: DEMO_DEVICE_IDS.map(id => ({ deviceid: id, nickname: id, status: 'online' })) })
+    if (!SAFI_API_KEY) return c.json({ error: 'SAFI_API_KEY not configured' }, 500)
+    try {
+      const url = `${SAFI_API_URL}/devices?company_id=${COMPANY_ID}`
+      const res = await fetch(url, { headers: safiHeaders() })
+      const data = await res.json() as unknown
+      return c.json(data as Record<string, unknown>, res.status as 200)
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 502)
+    }
+  })
+  app.get('/api/devices/energy', async (c: Context) => {
+    if (DEMO_MODE) {
+      const fromMs = Number(c.req.query('from_ts') ?? Date.now())
+      const toMs = Number(c.req.query('to_ts') ?? Date.now())
+      const data = DEMO_DEVICE_IDS.map(id => {
+        const total = demoEnergyFor(id, fromMs, toMs)
+        return {
+          deviceid: id,
+          fromts: new Date(fromMs).toISOString(),
+          tots: new Date(toMs).toISOString(),
+          energy: {
+            online: Math.round(total * 0.8 * 100) / 100,
+            idle: Math.round(total * 0.15 * 100) / 100,
+            offline: Math.round(total * 0.05 * 100) / 100,
+            total,
+          },
+        }
+      })
+      return c.json({ data })
+    }
+    if (!SAFI_API_KEY) return c.json({ error: 'SAFI_API_KEY not configured' }, 500)
+    const qs = new URLSearchParams(c.req.query() as Record<string, string>)
+    qs.set('company_id', COMPANY_ID ?? '')
+    try {
+      const url = `${SAFI_API_URL}/devices/energy?${qs.toString()}`
+      const res = await fetch(url, { headers: safiHeaders() })
+      const data = await res.json() as unknown
+      return c.json(data as Record<string, unknown>, res.status as 200)
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 502)
+    }
+  })
 
   // --- Upload history ---
   app.get('/api/upload-history', (c: Context) => {
@@ -515,12 +547,9 @@ export default function customServer(app: Hono): void {
 
   // --- Production entries ---
   app.post('/api/production-entries', async (c: Context) => {
-    // User-initiated writes use the session's Bearer access token so SAFI
-    // attributes the entry to the authenticated user and derives the company
-    // from the JWT. The scheduler uses api-key separately in executeSchedule
-    // since it runs without a user session.
-    const session = c.get('session') as { accessToken?: string; company?: string } | undefined
-    const accessToken = session?.accessToken
+    // SAFI staging doesn't accept JWT Bearer tokens yet — writes go through
+    // the server-side SAFI_API_KEY + company_id, same as device reads.
+    // Auth at the app boundary is enforced by fd-app's session middleware.
     const body = await c.req.json() as Record<string, unknown>
     const { device_id, from_ts, to_ts, production, waste, timezone } = body
     const manualTz = typeof timezone === 'string' && timezone ? timezone : DEFAULT_TIMEZONE
@@ -573,18 +602,11 @@ export default function customServer(app: Hono): void {
         response = { status: 201, ok: true }
         data = { id: `demo-${randomUUID()}` }
       } else {
-        // Bearer auth: SAFI derives company from JWT, so no company_id query param.
-        // api-key fallback (no session) still needs company_id. In practice the
-        // route is auth-gated by fd-app middleware so accessToken is always set.
-        const safiUrl = accessToken
-          ? `${SAFI_API_URL}/production-entries`
-          : `${SAFI_API_URL}/production-entries?company_id=${COMPANY_ID}`
-        const authHeaders: Record<string, string> = accessToken
-          ? { Authorization: `Bearer ${accessToken}` }
-          : { 'api-key': SAFI_API_KEY! }
+        if (!SAFI_API_KEY) return c.json({ error: 'SAFI_API_KEY not configured' }, 500)
+        const safiUrl = `${SAFI_API_URL}/production-entries?company_id=${COMPANY_ID}`
         const res = await fetch(safiUrl, {
           method: 'POST',
-          headers: { ...authHeaders, 'Content-Type': 'application/json' },
+          headers: { 'api-key': SAFI_API_KEY, 'Content-Type': 'application/json' },
           body: JSON.stringify(safiBody),
         })
         response = { status: res.status, ok: res.ok }
@@ -597,7 +619,7 @@ export default function customServer(app: Hono): void {
         // block a 24-hour entry covering the same day. Listing the conflicts lets the
         // user decide whether to delete them or pick a different target device.
         if (res.status === 409) {
-          const overlaps = await fetchOverlappingEntries(device_id, fromMs, toMs, accessToken)
+          const overlaps = await fetchOverlappingEntries(device_id, fromMs, toMs)
           data.conflicts = overlaps
           ;(data as Record<string, unknown>).timezone = manualTz
           if (overlaps.length > 0) {
@@ -648,16 +670,12 @@ export default function customServer(app: Hono): void {
         status: 'created',
       })
     }
+    // SAFI staging doesn't accept JWT Bearer tokens — use api-key + company_id
+    // like the rest of our SAFI calls.
+    if (!SAFI_API_KEY) return c.json({ error: 'SAFI_API_KEY not configured' }, 500)
     try {
-      const session = c.get('session') as { accessToken?: string } | undefined
-      const accessToken = session?.accessToken
-      const url = accessToken
-        ? `${SAFI_API_URL}/production-entries/${id}`
-        : `${SAFI_API_URL}/production-entries/${id}?company_id=${COMPANY_ID}`
-      const headers: Record<string, string> = accessToken
-        ? { Authorization: `Bearer ${accessToken}` }
-        : { 'api-key': SAFI_API_KEY! }
-      const response = await fetch(url, { headers })
+      const url = `${SAFI_API_URL}/production-entries/${id}?company_id=${COMPANY_ID}`
+      const response = await fetch(url, { headers: { 'api-key': SAFI_API_KEY } })
       const data = await response.json()
       return c.json(data)
     } catch {

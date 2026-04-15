@@ -1,19 +1,18 @@
 // fd-app serves everything on the same origin — auth is handled via session cookies.
-// Device/energy reads go through the framework's /api/safi/* proxy, which forwards
-// the session's access token to SAFI as a Bearer. Write endpoints (schedules,
-// production entries, history) are this app's own custom Hono routes in server.ts.
-import { safiApi } from '@safi_ai/fd-app';
+// Device/energy reads go through our custom /api/devices + /api/devices/energy
+// routes (api-key auth) because SAFI staging doesn't accept JWT Bearer tokens
+// on these endpoints — the framework's /api/safi/* proxy would return 401 and
+// the client helper would fire bridge.notifySessionExpired(), kicking off an
+// iframe reload loop. Once SAFI supports Bearer everywhere we can switch back
+// to safiApi.getDevices()/getDevicesEnergy() from @safi_ai/fd-app.
+// Write endpoints (schedules, production entries, history) are also our own
+// custom Hono routes in server.ts.
 
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
 // Demo mode short-circuits SAFI calls so the UI is exercisable without live data.
 // Flag is baked in at build time; mock data is identical on every load.
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
-
-// Dev bypass: route device/energy reads through custom server routes that use the
-// server-side SAFI_API_KEY, so local dev works without a real Guidewheel session
-// access token. Never enable in production.
-const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS === 'true';
 
 const DEMO_DEVICES: Device[] = [
   { deviceid: 'demo-extruder-01', nickname: 'Extruder Line 1', status: 'online' },
@@ -131,18 +130,13 @@ export interface Schedule {
 
 export async function fetchDevices(): Promise<Device[]> {
   if (DEMO_MODE) return DEMO_DEVICES;
-  // DEV_BYPASS still hits the api-key-backed /api/dev/* routes for local dev
-  // without a real Guidewheel session. In prod, reads go through the
-  // framework's /api/safi/* proxy which uses the session Bearer token.
-  if (DEV_BYPASS) {
-    const res = await fetch('/api/dev/devices');
-    if (!res.ok) throw new Error('Failed to fetch devices');
-    const data = await res.json();
-    return data.data ?? data;
-  }
-  // safiApi.getDevices() returns fd-app's Device shape — structurally compatible
-  // with our local Device interface (deviceid, nickname, status).
-  return (await safiApi.getDevices()) as unknown as Device[];
+  // Custom /api/devices route uses api-key (SAFI staging doesn't accept Bearer yet).
+  // DEV_BYPASS uses the same backend — the dev/prod distinction was retired
+  // along with the Bearer-auth /api/safi/* path.
+  const res = await fetch('/api/devices');
+  if (!res.ok) throw new Error('Failed to fetch devices');
+  const data = await res.json();
+  return data.data ?? data;
 }
 
 export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceEnergy[]> {
@@ -163,17 +157,11 @@ export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceE
       };
     });
   }
-  if (DEV_BYPASS) {
-    const params = new URLSearchParams({ from_ts: String(fromMs), to_ts: String(toMs), group_by: 'day' });
-    const res = await fetch(`/api/dev/devices/energy?${params}`);
-    if (!res.ok) throw new Error('Failed to fetch energy data');
-    const data = await res.json();
-    return data.data ?? data;
-  }
-  const data = await safiApi.getDevicesEnergy({ from_ts: fromMs, to_ts: toMs, group_by: 'day' });
-  // fd-app's DeviceEnergyData uses number for fromts/tots; our local type accepts
-  // string (legacy SAFI ISO format). The shape is otherwise identical.
-  return data as unknown as DeviceEnergy[];
+  const params = new URLSearchParams({ from_ts: String(fromMs), to_ts: String(toMs), group_by: 'day' });
+  const res = await fetch(`/api/devices/energy?${params}`);
+  if (!res.ok) throw new Error('Failed to fetch energy data');
+  const data = await res.json();
+  return data.data ?? data;
 }
 
 export interface OverlapConflict {

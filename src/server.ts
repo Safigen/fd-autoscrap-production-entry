@@ -11,10 +11,34 @@ const DATA_DIR = process.env.DATA_DIR || process.cwd()
 const SCHEDULES_FILE = join(DATA_DIR, 'schedules.json')
 const HISTORY_FILE = join(DATA_DIR, 'upload_history.json')
 const MAX_HISTORY = 500
+// Demo mode: skip SAFI network calls and synthesize deterministic energy/entries.
+const DEMO_MODE = process.env.DEMO_MODE === 'true'
+// Dev bypass: expose api-key-authenticated /api/dev/* reads so local devs can use
+// real SAFI staging data without a Guidewheel session access token. Never true in prod.
+const DEV_BYPASS = process.env.FD_DEV_BYPASS === 'true'
 
 // --- Boot-time validation ---
-if (!SAFI_API_KEY) console.warn('[server] SAFI_API_KEY is not set — scheduler and production entry creation will fail')
-if (!COMPANY_ID) console.warn('[server] SAFI_COMPANY_ID is not set')
+if (DEMO_MODE) {
+  console.log('[server] DEMO_MODE=true — SAFI calls are mocked with synthetic data')
+} else {
+  if (!SAFI_API_KEY) console.warn('[server] SAFI_API_KEY is not set — scheduler and production entry creation will fail')
+  if (!COMPANY_ID) console.warn('[server] SAFI_COMPANY_ID is not set')
+}
+
+// --- Demo data (mirrors src/api.ts DEMO_DEVICES) ---
+const DEMO_DEVICE_IDS = [
+  'demo-extruder-01', 'demo-extruder-02', 'demo-press-01', 'demo-press-02',
+  'demo-scrap-chopper', 'demo-regrind-mill', 'demo-production-totalizer', 'demo-waste-totalizer',
+]
+
+function demoEnergyFor(deviceId: string, fromMs: number, toMs: number): number {
+  const hours = Math.max(1, (toMs - fromMs) / 3_600_000)
+  let seed = 0
+  for (let i = 0; i < deviceId.length; i++) seed = (seed * 31 + deviceId.charCodeAt(i)) >>> 0
+  const baseKwhPerHour = 4 + (seed % 20)
+  const jitter = ((seed >>> 8) % 100) / 1000
+  return Math.round(baseKwhPerHour * hours * (1 + jitter) * 100) / 100
+}
 
 // --- Time-range validation ---
 const MAX_RANGE_DAYS = 31
@@ -37,21 +61,48 @@ function validateTimeRange(fromTs: unknown, toTs: unknown, opts: { unit?: 'iso' 
   return null
 }
 
-// --- Schedule persistence ---
+// --- Data model ---
+
+type Rounding = 'none' | 'integer' | 'one_decimal' | 'two_decimals'
+
+interface SourceConfig {
+  device_id: string
+  divisor: number
+  rounding: Rounding
+}
 
 interface Schedule {
   id: string
-  source_device_id: string
   target_device_id: string
+  production_source: SourceConfig | null
+  waste_source: SourceConfig | null
   frequency: 'daily' | 'weekly'
   time: string
   timezone: string
-  divisor: number
-  rounding: 'none' | 'integer' | 'one_decimal' | 'two_decimals'
   enabled: boolean
   created_at: string
   updated_at?: string
 }
+
+interface HistoryEntry {
+  id: string
+  source: 'manual' | 'scheduled'
+  schedule_id?: string
+  target_device_id: string
+  from_ts: number
+  to_ts: number
+  production_source: SourceConfig | null
+  production_energy: number | null
+  production_value: number | null
+  waste_source: SourceConfig | null
+  waste_energy: number | null
+  waste_value: number | null
+  api_status: number
+  api_error: string | null
+  created_at: string
+}
+
+// --- Schedule persistence ---
 
 function loadSchedules(): Schedule[] {
   if (!existsSync(SCHEDULES_FILE)) return []
@@ -63,23 +114,6 @@ function saveSchedules(schedules: Schedule[]): void {
 }
 
 // --- Upload history persistence ---
-
-interface HistoryEntry {
-  id: string
-  source: 'manual' | 'scheduled'
-  schedule_id?: string
-  source_device_id: string | null
-  target_device_id: string
-  from_ts: number
-  to_ts: number
-  total_energy: number | null
-  waste_value: number | null
-  divisor: number | null
-  rounding: string | null
-  api_status: number
-  api_error: string | null
-  created_at: string
-}
 
 function loadHistory(): HistoryEntry[] {
   if (!existsSync(HISTORY_FILE)) return []
@@ -101,40 +135,65 @@ function appendHistoryEntry(entry: HistoryEntry): HistoryEntry {
 // --- Validation ---
 
 const DEVICE_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/
-const SCHEDULE_PATCH_FIELDS = [
-  'source_device_id', 'target_device_id', 'frequency', 'time', 'timezone', 'divisor', 'rounding', 'enabled',
-] as const
 const VALID_FREQUENCIES = new Set(['daily', 'weekly'])
-const VALID_ROUNDINGS = new Set(['none', 'integer', 'one_decimal', 'two_decimals'])
+const VALID_ROUNDINGS = new Set<Rounding>(['none', 'integer', 'one_decimal', 'two_decimals'])
 const VALID_TIMEZONES = new Set([
   'America/Los_Angeles', 'America/Denver', 'America/Chicago', 'America/New_York',
   'America/Anchorage', 'Pacific/Honolulu', 'UTC',
 ])
 const DEFAULT_TIMEZONE = 'America/Los_Angeles'
 
+function validateSourceConfig(src: unknown, field: string): string | null {
+  if (src == null) return null
+  if (typeof src !== 'object') return `${field} must be an object`
+  const s = src as Record<string, unknown>
+  if (typeof s.device_id !== 'string' || !DEVICE_ID_RE.test(s.device_id)) return `invalid ${field}.device_id`
+  const div = Number(s.divisor)
+  if (!Number.isFinite(div) || div <= 0) return `${field}.divisor must be a positive number`
+  if (s.rounding != null && !VALID_ROUNDINGS.has(s.rounding as Rounding)) return `invalid ${field}.rounding`
+  return null
+}
+
+function normalizeSourceConfig(src: unknown): SourceConfig | null {
+  if (src == null) return null
+  const s = src as Record<string, unknown>
+  return {
+    device_id: s.device_id as string,
+    divisor: Number(s.divisor),
+    rounding: (s.rounding as Rounding) ?? 'none',
+  }
+}
+
 function validateScheduleFields(fields: Record<string, unknown>, opts: { partial?: boolean } = {}): string | null {
   if (!opts.partial) {
-    for (const k of ['source_device_id', 'target_device_id', 'frequency', 'time', 'divisor']) {
-      if (fields[k] == null || fields[k] === '') return `${k} is required`
+    if (fields.target_device_id == null || fields.target_device_id === '') return 'target_device_id is required'
+    if (fields.frequency == null || fields.frequency === '') return 'frequency is required'
+    if (fields.time == null || fields.time === '') return 'time is required'
+    if (fields.production_source == null && fields.waste_source == null) {
+      return 'at least one of production_source or waste_source is required'
     }
   }
-  if (fields.source_device_id != null && (typeof fields.source_device_id !== 'string' || !DEVICE_ID_RE.test(fields.source_device_id))) return 'invalid source_device_id'
-  if (fields.target_device_id != null && (typeof fields.target_device_id !== 'string' || !DEVICE_ID_RE.test(fields.target_device_id))) return 'invalid target_device_id'
+  if (fields.target_device_id != null && (typeof fields.target_device_id !== 'string' || !DEVICE_ID_RE.test(fields.target_device_id))) {
+    return 'invalid target_device_id'
+  }
   if (fields.frequency != null && !VALID_FREQUENCIES.has(fields.frequency as string)) return 'frequency must be daily or weekly'
   if (fields.time != null && !/^\d{2}:\d{2}$/.test(fields.time as string)) return 'time must be HH:MM'
-  if (fields.divisor != null) {
-    const n = Number(fields.divisor)
-    if (!Number.isFinite(n) || n <= 0) return 'divisor must be a positive number'
-  }
-  if (fields.rounding != null && !VALID_ROUNDINGS.has(fields.rounding as string)) return 'invalid rounding'
   if (fields.timezone != null && !VALID_TIMEZONES.has(fields.timezone as string)) return 'invalid timezone'
   if (fields.enabled != null && typeof fields.enabled !== 'boolean') return 'enabled must be boolean'
+  if (Object.prototype.hasOwnProperty.call(fields, 'production_source')) {
+    const err = validateSourceConfig(fields.production_source, 'production_source')
+    if (err) return err
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, 'waste_source')) {
+    const err = validateSourceConfig(fields.waste_source, 'waste_source')
+    if (err) return err
+  }
   return null
 }
 
 // --- Schedule execution engine ---
 
-function applyRounding(value: number, rounding: string): number {
+function applyRounding(value: number, rounding: Rounding): number {
   switch (rounding) {
     case 'integer': return Math.round(value)
     case 'one_decimal': return Math.round(value * 10) / 10
@@ -178,58 +237,169 @@ function getYesterdayRangeMs(tz: string = DEFAULT_TIMEZONE): { fromMs: number; t
   return { fromMs: midnightYesterday, toMs: midnightToday }
 }
 
-async function executeSchedule(schedule: Schedule): Promise<{ skipped?: boolean; reason?: string; status?: number; entry_id?: string | null; energy?: number | null; waste?: number | null; error?: string | null }> {
-  const { id: scheduleId, source_device_id, target_device_id, divisor, rounding, timezone } = schedule
+interface EnergyRow { deviceid: string; energy: { total: number | null } }
+
+interface OverlapConflict { id: unknown; from_ts: number; to_ts: number }
+
+// Look up SAFI production entries on a device that overlap [fromMs, toMs].
+// Used to enrich 409 "duplicate entry" responses with the actual culprits.
+async function fetchOverlappingEntries(
+  deviceId: string,
+  fromMs: number,
+  toMs: number,
+): Promise<OverlapConflict[]> {
+  if (DEMO_MODE || !SAFI_API_KEY) return []
+  const lookbackDays = 2
+  const lookaheadDays = 2
+  const qs = new URLSearchParams({
+    company_id: COMPANY_ID ?? '',
+    device_id: deviceId,
+    from_ts: String(fromMs - lookbackDays * 86_400_000),
+    to_ts: String(toMs + lookaheadDays * 86_400_000),
+  })
+  try {
+    const res = await fetch(`${SAFI_API_URL}/production-entries?${qs}`, {
+      headers: { 'api-key': SAFI_API_KEY },
+    })
+    if (!res.ok) return []
+    const json = await res.json() as { data?: unknown[] } | unknown[]
+    const rows = Array.isArray(json) ? json : (json.data ?? [])
+    const asMs = (v: unknown): number => {
+      if (typeof v === 'number') return v < 1e12 ? v * 1000 : v
+      if (typeof v === 'string') {
+        // SAFI sometimes serializes epoch-ms as a numeric string.
+        if (/^\d+$/.test(v)) {
+          const n = Number(v)
+          return Number.isFinite(n) ? (n < 1e12 ? n * 1000 : n) : 0
+        }
+        const parsed = Date.parse(v)
+        return Number.isFinite(parsed) ? parsed : 0
+      }
+      return 0
+    }
+    return (rows as Array<Record<string, unknown>>)
+      .map(e => {
+        const duration = (e.duration as Record<string, Record<string, unknown>> | undefined) ?? {}
+        const scheduled = duration.scheduled ?? {}
+        const production = duration.production ?? {}
+        const efrom = asMs(e.from_ts ?? e.fromts ?? e.timestamp ?? scheduled.from ?? production.from)
+        const eto = asMs(e.to_ts ?? e.tots ?? scheduled.to ?? production.to)
+        return { id: e.id, from_ts: efrom, to_ts: eto }
+      })
+      .filter(e => e.from_ts && e.to_ts && e.from_ts < toMs && e.to_ts > fromMs)
+      .slice(0, 20)
+  } catch (err) {
+    console.error('[overlap-lookup] failed:', (err as Error).message)
+    return []
+  }
+}
+
+function formatOverlapTs(ms: number, tz: string): string {
+  // Human-readable "MMM D, YYYY h:mm A" in the target timezone.
+  try {
+    return new Date(ms).toLocaleString('en-US', {
+      timeZone: tz,
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+  } catch {
+    return new Date(ms).toISOString()
+  }
+}
+
+function formatOverlapSummary(overlaps: OverlapConflict[], tz: string): string {
+  return overlaps
+    .map(o => `${String(o.id).slice(0, 8)} ${formatOverlapTs(o.from_ts, tz)} → ${formatOverlapTs(o.to_ts, tz)}`)
+    .join('; ')
+}
+
+async function fetchEnergyForRange(fromMs: number, toMs: number): Promise<EnergyRow[]> {
+  if (DEMO_MODE) {
+    return DEMO_DEVICE_IDS.map(id => ({ deviceid: id, energy: { total: demoEnergyFor(id, fromMs, toMs) } }))
+  }
+  const url = `${SAFI_API_URL}/devices/energy?company_id=${COMPANY_ID}&from_ts=${fromMs}&to_ts=${toMs}&group_by=day`
+  const res = await fetch(url, { headers: { 'api-key': SAFI_API_KEY! } })
+  if (!res.ok) throw new Error(`Energy fetch failed: ${res.status}`)
+  const data = await res.json() as { data?: EnergyRow[] } | EnergyRow[]
+  const rows = Array.isArray(data) ? data : (data.data ?? [])
+  return rows
+}
+
+function computeSourceValue(rows: EnergyRow[], src: SourceConfig | null): { energy: number | null; value: number | null } {
+  if (!src) return { energy: null, value: null }
+  const row = rows.find(r => r.deviceid === src.device_id)
+  const energy = row?.energy?.total ?? null
+  if (energy == null) return { energy: null, value: null }
+  const value = src.divisor > 0 ? applyRounding(energy / src.divisor, src.rounding || 'none') : null
+  return { energy, value }
+}
+
+async function executeSchedule(
+  schedule: Schedule,
+): Promise<{ skipped?: boolean; reason?: string; status?: number; entry_id?: string | null; production_energy?: number | null; production_value?: number | null; waste_energy?: number | null; waste_value?: number | null; error?: string | null }> {
+  const { id: scheduleId, target_device_id, production_source, waste_source, timezone } = schedule
   const tz = timezone || DEFAULT_TIMEZONE
   const { fromMs, toMs } = getYesterdayRangeMs(tz)
 
-  // Check for duplicate
-  const history = loadHistory()
-  const alreadyCreated = history.find(h =>
-    h.target_device_id === target_device_id &&
-    h.from_ts === fromMs &&
-    h.to_ts === toMs &&
-    h.api_status === 201
-  )
-  if (alreadyCreated) {
-    console.log(`[scheduler] Entry already exists for ${target_device_id} ${fromMs}-${toMs} — skipping.`)
-    return { skipped: true, reason: 'already_created' }
-  }
+  // No history-based duplicate check — local history can drift from SAFI
+  // (entries get deleted, container state resets, etc.). SAFI's 409 is the
+  // source of truth for "already exists." The 60s-interval runner has its own
+  // in-memory `lastRunDate` guard to prevent the same-minute from firing twice
+  // within a single process lifetime.
 
-  // Fetch energy for source device
-  const energyUrl = `${SAFI_API_URL}/devices/energy?company_id=${COMPANY_ID}&from_ts=${fromMs}&to_ts=${toMs}&group_by=day`
-  const energyRes = await fetch(energyUrl, { headers: { 'api-key': SAFI_API_KEY! } })
-  if (!energyRes.ok) throw new Error(`Energy fetch failed: ${energyRes.status}`)
-  const energyData = await energyRes.json() as { data?: Array<{ deviceid: string; energy: { total: number | null } }> }
+  // Fetch energy once for all sources
+  const rows = await fetchEnergyForRange(fromMs, toMs)
+  const prod = computeSourceValue(rows, production_source)
+  const waste = computeSourceValue(rows, waste_source)
 
-  const devices = energyData.data ?? (energyData as unknown as Array<{ deviceid: string; energy: { total: number | null } }>)
-  const sourceDevice = (Array.isArray(devices) ? devices : []).find(d => d.deviceid === source_device_id)
-  const totalEnergy = sourceDevice?.energy?.total ?? null
-
-  if (totalEnergy == null) {
-    console.log(`[scheduler] No energy data for ${source_device_id} — skipping.`)
+  if (prod.value == null && waste.value == null) {
+    console.log(`[scheduler] No energy data for ${schedule.id} — skipping.`)
     return { skipped: true, reason: 'no_energy_data' }
   }
 
-  // Compute waste
-  const wasteValue = divisor > 0 ? applyRounding(totalEnergy / divisor, rounding || 'integer') : null
-
-  // Create production entry via SAFI API
+  // Create production entry via SAFI API (or synthesize in demo mode)
   const safiBody: Record<string, unknown> = { device_id: target_device_id, from_ts: fromMs, to_ts: toMs }
-  if (wasteValue != null) safiBody.waste_qty = wasteValue
+  if (prod.value != null) safiBody.production_qty = prod.value
+  if (waste.value != null) safiBody.waste_qty = waste.value
 
-  const createRes = await fetch(`${SAFI_API_URL}/production-entries?company_id=${COMPANY_ID}`, {
-    method: 'POST',
-    headers: { 'api-key': SAFI_API_KEY!, 'Content-Type': 'application/json' },
-    body: JSON.stringify(safiBody),
-  })
-  const createData = await createRes.json() as { id?: string; message?: string }
+  let createRes: { status: number; ok: boolean }
+  let createData: { id?: string; message?: string }
+  let historyError: string | null = null
+  if (DEMO_MODE) {
+    createRes = { status: 201, ok: true }
+    createData = { id: `demo-sched-${randomUUID()}` }
+  } else {
+    const res = await fetch(`${SAFI_API_URL}/production-entries?company_id=${COMPANY_ID}`, {
+      method: 'POST',
+      headers: { 'api-key': SAFI_API_KEY!, 'Content-Type': 'application/json' },
+      body: JSON.stringify(safiBody),
+    })
+    createRes = { status: res.status, ok: res.ok }
+    createData = await res.json() as { id?: string; message?: string }
+    if (!res.ok) historyError = createData.message || `HTTP ${res.status}`
+
+    // On 409, enrich the error with the existing overlapping entries so the
+    // Run Now UI can show which entries are blocking.
+    if (res.status === 409) {
+      const overlaps = await fetchOverlappingEntries(target_device_id, fromMs, toMs)
+      if (overlaps.length > 0) {
+        historyError = `${overlaps.length} overlapping entry(ies) on device`
+        createData.message = `${createData.message || 'Duplicate entry'} — ${overlaps.length} existing entry(ies) overlap this window: ${formatOverlapSummary(overlaps, tz)}`
+      }
+    }
+  }
 
   const result = {
     status: createRes.status,
     entry_id: createData.id ?? null,
-    energy: totalEnergy,
-    waste: wasteValue,
+    production_energy: prod.energy,
+    production_value: prod.value,
+    waste_energy: waste.energy,
+    waste_value: waste.value,
     error: createRes.ok ? null : (createData.message || `HTTP ${createRes.status}`),
   }
 
@@ -237,16 +407,17 @@ async function executeSchedule(schedule: Schedule): Promise<{ skipped?: boolean;
     id: createData.id ?? `sched-${Date.now()}`,
     source: 'scheduled',
     schedule_id: scheduleId,
-    source_device_id,
     target_device_id,
     from_ts: fromMs,
     to_ts: toMs,
-    total_energy: totalEnergy,
-    waste_value: wasteValue,
-    divisor,
-    rounding: rounding || 'integer',
+    production_source,
+    production_energy: prod.energy,
+    production_value: prod.value,
+    waste_source,
+    waste_energy: waste.energy,
+    waste_value: waste.value,
     api_status: createRes.status,
-    api_error: result.error,
+    api_error: createRes.ok ? null : (historyError ?? `HTTP ${createRes.status}`),
     created_at: new Date().toISOString(),
   })
 
@@ -256,6 +427,81 @@ async function executeSchedule(schedule: Schedule): Promise<{ skipped?: boolean;
 // --- Hono routes ---
 
 export default function customServer(app: Hono): void {
+  // --- Dev-only bypass routes (read-only device + energy via api-key) ---
+  // These exist so local devs can hit real SAFI staging data without a
+  // Guidewheel-issued session access token. Guarded by FD_DEV_BYPASS env var
+  // so they never register in prod.
+  if (DEV_BYPASS) {
+    console.log('[server] FD_DEV_BYPASS=true — exposing /api/dev/devices and /api/dev/devices/energy (api-key auth)')
+    const devHeaders = () => ({ 'api-key': SAFI_API_KEY ?? '' })
+    app.get('/api/dev/devices', async (c: Context) => {
+      try {
+        const url = `${SAFI_API_URL}/devices?company_id=${COMPANY_ID}`
+        const res = await fetch(url, { headers: devHeaders() })
+        const data = await res.json() as unknown
+        return c.json(data as Record<string, unknown>, res.status as 200)
+      } catch (err) {
+        return c.json({ error: (err as Error).message }, 502)
+      }
+    })
+    app.get('/api/dev/devices/energy', async (c: Context) => {
+      const qs = new URLSearchParams(c.req.query() as Record<string, string>)
+      qs.set('company_id', COMPANY_ID ?? '')
+      try {
+        const url = `${SAFI_API_URL}/devices/energy?${qs.toString()}`
+        const res = await fetch(url, { headers: devHeaders() })
+        const data = await res.json() as unknown
+        return c.json(data as Record<string, unknown>, res.status as 200)
+      } catch (err) {
+        return c.json({ error: (err as Error).message }, 502)
+      }
+    })
+  }
+
+  // --- SAFI proxy for authenticated users ---
+  // SAFI staging requires the `api-key` header — it does NOT accept the Bearer
+  // access token issued by DataProxy (returns 401 "No API key found in request").
+  // So this proxy uses SAFI_API_KEY server-side, but only for requests that come
+  // from an authenticated session. The session supplies the `company` to scope
+  // queries (falls back to SAFI_COMPANY_ID env).
+  app.all('/api/fleet/*', async (c: Context) => {
+    const session = c.get('session') as { company?: string } | undefined
+    if (!session) return c.json({ error: 'Unauthorized' }, 401)
+    if (!SAFI_API_KEY) return c.json({ error: 'SAFI_API_KEY not configured' }, 500)
+    const upstreamPath = c.req.path.replace(/^\/api\/fleet/, '')
+    const url = new URL(`${SAFI_API_URL}${upstreamPath}`)
+    const incoming = new URL(c.req.url)
+    for (const [key, value] of incoming.searchParams.entries()) {
+      url.searchParams.set(key, value)
+    }
+    if (!url.searchParams.has('company_id')) {
+      url.searchParams.set('company_id', session.company ?? COMPANY_ID ?? '')
+    }
+    const body = ['GET', 'HEAD'].includes(c.req.method) ? undefined : await c.req.text()
+    try {
+      const res = await fetch(url.toString(), {
+        method: c.req.method,
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': SAFI_API_KEY,
+        },
+        body,
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        console.error(`[fleet-proxy] SAFI ${res.status} ${c.req.method} ${upstreamPath} — ${errText.slice(0, 200)}`)
+        return c.json({ error: `SAFI ${res.status}`, detail: errText.slice(0, 500) }, res.status as 500)
+      }
+      const buf = await res.arrayBuffer()
+      return c.newResponse(buf, res.status as 200, {
+        'Content-Type': res.headers.get('Content-Type') ?? 'application/json',
+      })
+    } catch (err) {
+      console.error(`[fleet-proxy] network error ${c.req.method} ${upstreamPath}:`, (err as Error).message)
+      return c.json({ error: (err as Error).message }, 502)
+    }
+  })
+
   // --- Upload history ---
   app.get('/api/upload-history', (c: Context) => {
     return c.json(loadHistory())
@@ -269,46 +515,95 @@ export default function customServer(app: Hono): void {
   // --- Production entries ---
   app.post('/api/production-entries', async (c: Context) => {
     const body = await c.req.json() as Record<string, unknown>
-    const { device_id, from_ts, to_ts, waste, source_device_id, divisor, rounding, total_energy } = body
+    const { device_id, from_ts, to_ts, production, waste, timezone } = body
+    const manualTz = typeof timezone === 'string' && timezone ? timezone : DEFAULT_TIMEZONE
 
     if (!device_id || typeof device_id !== 'string' || from_ts == null || to_ts == null) {
       return c.json({ error: 'device_id, from_ts, and to_ts are required' }, 400)
     }
     if (!DEVICE_ID_RE.test(device_id)) return c.json({ error: 'Invalid device_id format' }, 400)
-    if (source_device_id && typeof source_device_id === 'string' && !DEVICE_ID_RE.test(source_device_id)) {
-      return c.json({ error: 'Invalid source_device_id format' }, 400)
-    }
     const rangeError = validateTimeRange(from_ts, to_ts, { unit: 'unix' })
     if (rangeError) return c.json({ error: rangeError }, 400)
+
+    type LegValue = { value: number | null; energy: number | null; source: SourceConfig | null }
+    const parseLeg = (leg: unknown, name: string): LegValue | { error: string } => {
+      if (leg == null) return { value: null, energy: null, source: null }
+      if (typeof leg !== 'object') return { error: `${name} must be an object` }
+      const l = leg as Record<string, unknown>
+      const value = l.value != null ? Number(l.value) : null
+      if (value != null && !Number.isFinite(value)) return { error: `${name}.value must be numeric` }
+      const energy = l.energy != null ? Number(l.energy) : null
+      let source: SourceConfig | null = null
+      if (l.source != null) {
+        const err = validateSourceConfig(l.source, `${name}.source`)
+        if (err) return { error: err }
+        source = normalizeSourceConfig(l.source)
+      }
+      return { value, energy, source }
+    }
+
+    const prodParsed = parseLeg(production, 'production')
+    if ('error' in prodParsed) return c.json({ error: prodParsed.error }, 400)
+    const wasteParsed = parseLeg(waste, 'waste')
+    if ('error' in wasteParsed) return c.json({ error: wasteParsed.error }, 400)
+
+    if (prodParsed.value == null && wasteParsed.value == null) {
+      return c.json({ error: 'At least one of production.value or waste.value is required' }, 400)
+    }
 
     try {
       const fromMs = (from_ts as number) < 1e12 ? (from_ts as number) * 1000 : (from_ts as number)
       const toMs = (to_ts as number) < 1e12 ? (to_ts as number) * 1000 : (to_ts as number)
       const safiBody: Record<string, unknown> = { device_id, from_ts: fromMs, to_ts: toMs }
-      const wasteObj = waste as { wasted?: number } | undefined
-      const wasteValue = wasteObj?.wasted != null ? Number(wasteObj.wasted) : null
-      if (wasteValue != null) safiBody.waste_qty = wasteValue
+      if (prodParsed.value != null) safiBody.production_qty = prodParsed.value
+      if (wasteParsed.value != null) safiBody.waste_qty = wasteParsed.value
 
-      const response = await fetch(`${SAFI_API_URL}/production-entries?company_id=${COMPANY_ID}`, {
-        method: 'POST',
-        headers: { 'api-key': SAFI_API_KEY!, 'Content-Type': 'application/json' },
-        body: JSON.stringify(safiBody),
-      })
-      const data = await response.json() as { id?: string; message?: string }
+      let response: { status: number; ok: boolean }
+      let data: { id?: string; message?: string; conflicts?: unknown[] }
+      // Short form of the error for upload history (keeps the badge readable).
+      let historyError: string | null = null
+      if (DEMO_MODE) {
+        response = { status: 201, ok: true }
+        data = { id: `demo-${randomUUID()}` }
+      } else {
+        const res = await fetch(`${SAFI_API_URL}/production-entries?company_id=${COMPANY_ID}`, {
+          method: 'POST',
+          headers: { 'api-key': SAFI_API_KEY!, 'Content-Type': 'application/json' },
+          body: JSON.stringify(safiBody),
+        })
+        response = { status: res.status, ok: res.ok }
+        data = await res.json() as { id?: string; message?: string }
+        if (!res.ok) historyError = data.message || `HTTP ${res.status}`
+
+        // On SAFI 409 (unique-key conflict), fetch the existing entries that overlap
+        // the requested window and surface them to the client. SAFI treats this as an
+        // "overlap" constraint, not strict equality — e.g. 8-hour shift entries will
+        // block a 24-hour entry covering the same day. Listing the conflicts lets the
+        // user decide whether to delete them or pick a different target device.
+        if (res.status === 409) {
+          const overlaps = await fetchOverlappingEntries(device_id, fromMs, toMs)
+          data.conflicts = overlaps
+          if (overlaps.length > 0) {
+            historyError = `${overlaps.length} overlapping entry(ies) on device`
+            data.message = `${data.message || 'Duplicate entry'} — ${overlaps.length} existing entry(ies) overlap this window: ${formatOverlapSummary(overlaps, manualTz)}`
+          }
+        }
+      }
 
       appendHistoryEntry({
         id: data.id ?? `local-${Date.now()}`,
         source: 'manual',
-        source_device_id: (source_device_id as string) || null,
         target_device_id: device_id,
         from_ts: fromMs,
         to_ts: toMs,
-        total_energy: (total_energy as number) ?? null,
-        waste_value: wasteValue,
-        divisor: (divisor as number) ?? null,
-        rounding: (rounding as string) ?? null,
+        production_source: prodParsed.source,
+        production_energy: prodParsed.energy,
+        production_value: prodParsed.value,
+        waste_source: wasteParsed.source,
+        waste_energy: wasteParsed.energy,
+        waste_value: wasteParsed.value,
         api_status: response.status,
-        api_error: response.ok ? null : (data.message || `HTTP ${response.status}`),
+        api_error: response.ok ? null : (historyError ?? `HTTP ${response.status}`),
         created_at: new Date().toISOString(),
       })
 
@@ -322,6 +617,20 @@ export default function customServer(app: Hono): void {
     const id = c.req.param('id') ?? ''
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) {
       return c.json({ error: 'Invalid id' }, 400)
+    }
+    if (DEMO_MODE) {
+      const entry = loadHistory().find(h => h.id === id)
+      if (!entry) return c.json({ error: 'Not found' }, 404)
+      return c.json({
+        id: entry.id,
+        device_id: entry.target_device_id,
+        timestamp: entry.from_ts,
+        to_ts: entry.to_ts,
+        production: { produced: entry.production_value },
+        waste: { wasted: entry.waste_value },
+        created_at: entry.created_at,
+        status: 'created',
+      })
     }
     try {
       const response = await fetch(`${SAFI_API_URL}/production-entries/${id}?company_id=${COMPANY_ID}`, {
@@ -346,13 +655,12 @@ export default function customServer(app: Hono): void {
     const schedules = loadSchedules()
     const schedule: Schedule = {
       id: randomUUID(),
-      source_device_id: body.source_device_id as string,
       target_device_id: body.target_device_id as string,
+      production_source: normalizeSourceConfig(body.production_source),
+      waste_source: normalizeSourceConfig(body.waste_source),
       frequency: body.frequency as Schedule['frequency'],
       time: body.time as string,
       timezone: (body.timezone as string) ?? DEFAULT_TIMEZONE,
-      divisor: Number(body.divisor),
-      rounding: (body.rounding as Schedule['rounding']) ?? 'none',
       enabled: (body.enabled as boolean) ?? true,
       created_at: new Date().toISOString(),
     }
@@ -366,12 +674,20 @@ export default function customServer(app: Hono): void {
     const idx = schedules.findIndex(s => s.id === c.req.param('id'))
     if (idx === -1) return c.json({ error: 'Schedule not found' }, 404)
     const body = await c.req.json() as Record<string, unknown>
+    const patchableFields = ['target_device_id', 'production_source', 'waste_source', 'frequency', 'time', 'timezone', 'enabled'] as const
     const patch: Record<string, unknown> = {}
-    for (const key of SCHEDULE_PATCH_FIELDS) {
+    for (const key of patchableFields) {
       if (Object.prototype.hasOwnProperty.call(body, key)) patch[key] = body[key]
     }
     const err = validateScheduleFields(patch, { partial: true })
     if (err) return c.json({ error: err }, 400)
+    // Normalize source configs if provided
+    if (Object.prototype.hasOwnProperty.call(patch, 'production_source')) {
+      patch.production_source = normalizeSourceConfig(patch.production_source)
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'waste_source')) {
+      patch.waste_source = normalizeSourceConfig(patch.waste_source)
+    }
     schedules[idx] = { ...schedules[idx], ...patch, updated_at: new Date().toISOString() } as Schedule
     saveSchedules(schedules)
     return c.json(schedules[idx])
@@ -412,7 +728,9 @@ export default function customServer(app: Hono): void {
       if (schedulerState.lastRunDate[sched.id] === todayKey) continue
 
       schedulerState.lastRunDate[sched.id] = todayKey
-      console.log(`[scheduler] Executing schedule ${sched.id} (${sched.source_device_id} → ${sched.target_device_id}) at ${currentTime} ${tz}`)
+      const prodId = sched.production_source?.device_id ?? '—'
+      const wasteId = sched.waste_source?.device_id ?? '—'
+      console.log(`[scheduler] Executing schedule ${sched.id} (prod:${prodId}, waste:${wasteId} → ${sched.target_device_id}) at ${currentTime} ${tz}`)
       try {
         const result = await executeSchedule(sched)
         if (result.skipped) {
@@ -420,7 +738,7 @@ export default function customServer(app: Hono): void {
         } else if (result.error) {
           console.error(`[scheduler] SAFI error: ${result.error}`)
         } else {
-          console.log(`[scheduler] Created entry ${result.entry_id}, energy=${result.energy}, waste=${result.waste}`)
+          console.log(`[scheduler] Created entry ${result.entry_id}, prod=${result.production_value}, waste=${result.waste_value}`)
         }
       } catch (err) {
         console.error(`[scheduler] Failed:`, (err as Error).message)
@@ -429,4 +747,19 @@ export default function customServer(app: Hono): void {
   }, 60_000)
 
   console.log('[server] Custom routes loaded (schedules, upload history, production entries)')
+
+  if (DEV_BYPASS) {
+    const devSession = Buffer.from(JSON.stringify({
+      accessToken: 'dev-bypass', company: COMPANY_ID ?? 'pretium', username: 'dev@local',
+    })).toString('base64')
+    console.log('')
+    console.log('[server] ────────────────────────────────────────────────────────────────')
+    console.log('[server]  DEV BYPASS: paste this in your browser console at localhost to')
+    console.log('[server]  create a local session cookie (fd-app auth needs a cookie, but')
+    console.log('[server]  reads/writes route through /api/dev/* which uses SAFI_API_KEY):')
+    console.log('[server]')
+    console.log(`[server]  document.cookie = "fd_session=${devSession}; path=/"; location.reload();`)
+    console.log('[server] ────────────────────────────────────────────────────────────────')
+    console.log('')
+  }
 }

@@ -1,6 +1,37 @@
 // fd-app serves everything on the same origin — auth is handled via session cookies.
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
+// Demo mode short-circuits SAFI calls so the UI is exercisable without live data.
+// Flag is baked in at build time; mock data is identical on every load.
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
+// Dev bypass: route device/energy reads through custom server routes that use the
+// server-side SAFI_API_KEY, so local dev works without a real Guidewheel session
+// access token. Never enable in production.
+const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS === 'true';
+
+const DEMO_DEVICES: Device[] = [
+  { deviceid: 'demo-extruder-01', nickname: 'Extruder Line 1', status: 'online' },
+  { deviceid: 'demo-extruder-02', nickname: 'Extruder Line 2', status: 'online' },
+  { deviceid: 'demo-press-01', nickname: 'Press A', status: 'online' },
+  { deviceid: 'demo-press-02', nickname: 'Press B', status: 'idle' },
+  { deviceid: 'demo-scrap-chopper', nickname: 'Scrap Chopper', status: 'online' },
+  { deviceid: 'demo-regrind-mill', nickname: 'Regrind Mill', status: 'online' },
+  { deviceid: 'demo-production-totalizer', nickname: 'Production Totalizer', status: 'online' },
+  { deviceid: 'demo-waste-totalizer', nickname: 'Waste Totalizer', status: 'online' },
+];
+
+// Stable pseudo-random energy for a device within a window — so reloads return the same values.
+function demoEnergyFor(deviceId: string, fromMs: number, toMs: number): number {
+  const hours = Math.max(1, (toMs - fromMs) / 3_600_000);
+  // Simple hash of the device id so each device gets a different baseline.
+  let seed = 0;
+  for (let i = 0; i < deviceId.length; i++) seed = (seed * 31 + deviceId.charCodeAt(i)) >>> 0;
+  const baseKwhPerHour = 4 + (seed % 20); // 4..23 kWh/hr
+  const jitter = ((seed >>> 8) % 100) / 1000; // up to 10% variance
+  return Math.round(baseKwhPerHour * hours * (1 + jitter) * 100) / 100;
+}
+
 export interface Device {
   deviceid: string;
   nickname: string;
@@ -25,29 +56,18 @@ export interface ProductionEntry {
   deviceId?: string;
   timestamp: string | number;
   to_ts: string | number;
-  waste: {
-    wasted: number | null;
-  };
+  production?: { produced: number | null };
+  waste?: { wasted: number | null };
   created_at: string;
   status: string;
 }
 
-export interface CreatedEntry {
-  id: string;
-  source_device_id: string;
-  target_device_id: string;
-  from_ts: number;
-  to_ts: number;
-  total_energy: number | null;
-  waste_value: number | null;
+export type Rounding = 'none' | 'integer' | 'one_decimal' | 'two_decimals';
+
+export interface SourceConfig {
+  device_id: string;
   divisor: number;
-  rounding: string;
-  created_at: string;
-  api_response: ProductionEntry | null;
-  /** HTTP status from SAFI (201 = created, 409 = duplicate, etc.) */
-  api_status?: number;
-  /** Error message from SAFI when the request failed */
-  api_error?: string | null;
+  rounding: Rounding;
 }
 
 // --- Settings persistence ---
@@ -91,40 +111,24 @@ export function saveSettings(settings: Partial<AppSettings>): void {
 
 export interface Schedule {
   id: string;
-  source_device_id: string;
   target_device_id: string;
+  production_source: SourceConfig | null;
+  waste_source: SourceConfig | null;
   frequency: 'daily' | 'weekly';
   time: string;
   timezone: TimezoneValue;
-  divisor: number;
-  rounding: 'none' | 'integer' | 'one_decimal' | 'two_decimals';
   enabled: boolean;
   created_at: string;
   updated_at?: string;
 }
 
-// --- localStorage helpers for tracking entries created from this app ---
-
-const ENTRIES_KEY = 'created_production_entries';
-
-export function getStoredEntries(): CreatedEntry[] {
-  try {
-    return JSON.parse(localStorage.getItem(ENTRIES_KEY) || '[]');
-  } catch {
-    return [];
-  }
-}
-
-export function storeEntry(entry: CreatedEntry): void {
-  const entries = getStoredEntries();
-  entries.unshift(entry);
-  localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
-}
-
 // --- API calls ---
 
 export async function fetchDevices(): Promise<Device[]> {
-  const res = await fetch('/api/safi/devices');
+  if (DEMO_MODE) return DEMO_DEVICES;
+  // /api/fleet/* is our own proxy that injects company_id from the session;
+  // /api/dev/* is the local-only bypass that uses SAFI_API_KEY directly.
+  const res = await fetch(DEV_BYPASS ? '/api/dev/devices' : '/api/fleet/devices');
   if (!res.ok) throw new Error('Failed to fetch devices');
   const data = await res.json();
   return data.data ?? data;
@@ -134,8 +138,23 @@ export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceE
   // SAFI staging requires millisecond timestamps — ISO strings return null energy.
   const fromMs = new Date(fromTs).getTime();
   const toMs = new Date(toTs).getTime();
+  if (DEMO_MODE) {
+    return DEMO_DEVICES.map(d => {
+      const total = demoEnergyFor(d.deviceid, fromMs, toMs);
+      const online = Math.round(total * 0.8 * 100) / 100;
+      const idle = Math.round(total * 0.15 * 100) / 100;
+      const offline = Math.round(total * 0.05 * 100) / 100;
+      return {
+        deviceid: d.deviceid,
+        fromts: new Date(fromMs).toISOString(),
+        tots: new Date(toMs).toISOString(),
+        energy: { online, idle, offline, total },
+      };
+    });
+  }
   const params = new URLSearchParams({ from_ts: String(fromMs), to_ts: String(toMs), group_by: 'day' });
-  const res = await fetch(`/api/safi/devices/energy?${params}`);
+  const url = DEV_BYPASS ? `/api/dev/devices/energy?${params}` : `/api/fleet/devices/energy?${params}`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch energy data');
   const data = await res.json();
   return data.data ?? data;
@@ -148,22 +167,35 @@ export interface CreateEntryResult {
   error: string | null;
 }
 
+export interface EntryLeg {
+  value: number | null;
+  energy?: number | null;
+  source?: SourceConfig | null;
+}
+
 export async function createProductionEntry(
   deviceId: string,
   fromTs: number,
   toTs: number,
-  wasteValue?: number | null,
-  metadata?: { source_device_id?: string; total_energy?: number | null; divisor?: number; rounding?: string },
+  production: EntryLeg | null,
+  waste: EntryLeg | null,
+  timezone?: TimezoneValue,
 ): Promise<CreateEntryResult> {
   const body: Record<string, unknown> = { device_id: deviceId, from_ts: fromTs, to_ts: toTs };
-  if (wasteValue != null) {
-    body.waste = { wasted: wasteValue };
+  if (timezone) body.timezone = timezone;
+  if (production && production.value != null) {
+    body.production = {
+      value: production.value,
+      energy: production.energy ?? null,
+      source: production.source ?? null,
+    };
   }
-  if (metadata) {
-    if (metadata.source_device_id) body.source_device_id = metadata.source_device_id;
-    if (metadata.total_energy != null) body.total_energy = metadata.total_energy;
-    if (metadata.divisor != null) body.divisor = metadata.divisor;
-    if (metadata.rounding) body.rounding = metadata.rounding;
+  if (waste && waste.value != null) {
+    body.waste = {
+      value: waste.value,
+      energy: waste.energy ?? null,
+      source: waste.source ?? null,
+    };
   }
   const res = await fetch('/api/production-entries', {
     method: 'POST',
@@ -174,7 +206,6 @@ export async function createProductionEntry(
   if (res.ok) {
     return { ok: true, status: res.status, data: json, error: null };
   }
-  // SAFI returns { statusCode, message, error? }
   const msg = json.message || json.error || `Request failed (${res.status})`;
   return { ok: false, status: res.status, data: null, error: msg };
 }
@@ -189,14 +220,15 @@ export interface UploadHistoryEntry {
   id: string;
   source: 'manual' | 'scheduled';
   schedule_id?: string;
-  source_device_id: string | null;
   target_device_id: string;
   from_ts: number;
   to_ts: number;
-  total_energy: number | null;
+  production_source: SourceConfig | null;
+  production_energy: number | null;
+  production_value: number | null;
+  waste_source: SourceConfig | null;
+  waste_energy: number | null;
   waste_value: number | null;
-  divisor: number | null;
-  rounding: string | null;
   api_status: number;
   api_error: string | null;
   created_at: string;
@@ -220,7 +252,10 @@ export async function createSchedule(schedule: Omit<Schedule, 'id' | 'created_at
     headers: JSON_HEADERS,
     body: JSON.stringify(schedule),
   });
-  if (!res.ok) throw new Error('Failed to create schedule');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to create schedule');
+  }
   return res.json();
 }
 
@@ -246,8 +281,10 @@ export interface ScheduleRunResult {
   reason?: string;
   status?: number;
   entry_id?: string | null;
-  energy?: number | null;
-  waste?: number | null;
+  production_energy?: number | null;
+  production_value?: number | null;
+  waste_energy?: number | null;
+  waste_value?: number | null;
   error?: string | null;
 }
 

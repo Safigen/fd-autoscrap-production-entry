@@ -31,12 +31,13 @@ import {
   fetchSchedules, createSchedule, updateSchedule, deleteSchedule, runScheduleNow,
   getSettings, saveSettings,
   TIMEZONE_OPTIONS, DEFAULT_TIMEZONE,
-  type Device, type DeviceEnergy, type Schedule, type UploadHistoryEntry, type TimezoneValue,
+  type Device, type DeviceEnergy, type Schedule, type SourceConfig, type UploadHistoryEntry,
+  type TimezoneValue, type Rounding,
 } from './api';
 
 const TOASTER_ID = 'main-toaster';
 
-function applyRounding(value: number, rounding: string): number {
+function applyRounding(value: number, rounding: Rounding): number {
   switch (rounding) {
     case 'integer': return Math.round(value);
     case 'one_decimal': return Math.round(value * 10) / 10;
@@ -45,7 +46,7 @@ function applyRounding(value: number, rounding: string): number {
   }
 }
 
-function formatRounding(rounding: string): string {
+function formatRounding(rounding: Rounding | string | null | undefined): string {
   switch (rounding) {
     case 'integer': return 'Round to integer';
     case 'one_decimal': return '1 decimal place';
@@ -65,16 +66,13 @@ function formatTs(ts: string | number): string {
 
 /**
  * Get start-of-day and end-of-day in a given IANA timezone for the selected calendar date.
- * The `date` object's year/month/day are treated as the local date the user picked.
  */
 function getDayRange(date: Date, tz: string) {
   const y = date.getFullYear();
-  const m = date.getMonth(); // 0-indexed
+  const m = date.getMonth();
   const d = date.getDate();
 
-  // Build a date string for midnight in the target timezone, then find the UTC epoch.
-  // Use Intl to get the UTC offset for that day in the target timezone.
-  const approx = new Date(Date.UTC(y, m, d, 12)); // noon UTC, close enough to get the right offset
+  const approx = new Date(Date.UTC(y, m, d, 12));
   const local = new Date(approx.toLocaleString('en-US', { timeZone: tz }));
   const offsetMs = local.getTime() - approx.getTime();
 
@@ -154,14 +152,12 @@ function PastDatePicker({ selected, onSelect, placeholder = 'Pick a date' }: {
   );
 }
 
-/** Alphabetical sort by nickname (case-insensitive), fallback to deviceid. */
 function sortDevicesByName(a: Device, b: Device): number {
   const an = (a.nickname || a.deviceid).toLowerCase();
   const bn = (b.nickname || b.deviceid).toLowerCase();
   return an.localeCompare(bn);
 }
 
-/** Searchable device picker with arrow-key navigation. */
 function DevicePicker({
   devices,
   value,
@@ -187,10 +183,8 @@ function DevicePicker({
     return devices.filter((d) => (d.nickname || d.deviceid).toLowerCase().includes(q));
   }, [devices, search]);
 
-  // Reset highlight when filtered list changes
   useEffect(() => { setHighlightIdx(0); }, [filtered]);
 
-  // Focus search input when popover opens
   useEffect(() => {
     if (open) {
       setSearch('');
@@ -199,7 +193,6 @@ function DevicePicker({
     }
   }, [open]);
 
-  // Scroll highlighted item into view
   useEffect(() => {
     if (!open) return;
     const list = listRef.current;
@@ -305,6 +298,121 @@ function SortableHead({
   );
 }
 
+/**
+ * A reusable section for configuring one energy source (production or waste).
+ */
+function SourceSection({
+  title,
+  description,
+  enabled,
+  onEnabledChange,
+  deviceId,
+  onDeviceChange,
+  divisor,
+  onDivisorChange,
+  rounding,
+  onRoundingChange,
+  devices,
+  energy,
+  loadingEnergy,
+  computedLabel,
+}: {
+  title: string;
+  description: string;
+  enabled: boolean;
+  onEnabledChange: (v: boolean) => void;
+  deviceId: string;
+  onDeviceChange: (id: string) => void;
+  divisor: number;
+  onDivisorChange: (n: number) => void;
+  rounding: Rounding;
+  onRoundingChange: (r: Rounding) => void;
+  devices: Device[];
+  energy: number | null;
+  loadingEnergy: boolean;
+  computedLabel: string;
+}) {
+  const computed = enabled && energy != null && divisor > 0 ? applyRounding(energy / divisor, rounding) : null;
+  return (
+    <div className={`rounded-md border p-4 ${enabled ? 'border-muted' : 'border-muted opacity-70'}`}>
+      <FlexColumn spacing={3}>
+        <FlexRow className="items-center justify-between">
+          <FlexColumn spacing={0}>
+            <p className="text-sm font-semibold text-foreground">{title}</p>
+            <p className="text-xs text-muted-foreground">{description}</p>
+          </FlexColumn>
+          <Switch checked={enabled} onCheckedChange={onEnabledChange} />
+        </FlexRow>
+
+        {enabled && (
+          <>
+            <div>
+              <Label className="mb-1.5 block text-sm">Source device (pull energy from)</Label>
+              <DevicePicker
+                devices={devices}
+                value={deviceId}
+                onChange={onDeviceChange}
+                placeholder="Select source device"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="mb-1.5 block text-sm">Divide energy by</Label>
+                <NumberInput
+                  value={Number.isFinite(divisor) ? divisor : ''}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    onDivisorChange(Number.isFinite(n) ? n : 0);
+                  }}
+                  min={0.01}
+                  step={1}
+                />
+              </div>
+              <div>
+                <Label className="mb-1.5 block text-sm">Rounding</Label>
+                <Select value={rounding} onValueChange={(v) => onRoundingChange(v as Rounding)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No rounding (raw)</SelectItem>
+                    <SelectItem value="integer">Round to integer</SelectItem>
+                    <SelectItem value="one_decimal">1 decimal place</SelectItem>
+                    <SelectItem value="two_decimals">2 decimal places</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {deviceId && (
+              <div className="rounded-sm border border-muted bg-background-accent p-3 text-sm">
+                {loadingEnergy ? (
+                  <FlexRow spacing={2} className="items-center">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-20" />
+                  </FlexRow>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Total Energy</p>
+                      <p className="font-medium text-foreground">
+                        {energy != null ? `${energy.toFixed(4)} kWh` : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">{computedLabel} (÷ {divisor})</p>
+                      <p className="font-semibold text-primary">
+                        {computed != null ? computed : '—'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </FlexColumn>
+    </div>
+  );
+}
+
 posthog.init('phc_QIgbD8nFuxMwPrURQbXJxKqI1uEwrmWrnorrr5v1oto', {
   api_host: 'https://us.i.posthog.com',
   persistence: 'localStorage',
@@ -315,7 +423,6 @@ function App() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Identify user in PostHog from fd-app session
   useEffect(() => {
     if (session?.username) {
       posthog.identify(session.username);
@@ -326,15 +433,26 @@ function App() {
   const [defaultDivisor, setDefaultDivisor] = useState(() => getSettings().default_divisor);
   const [appTimezone, setAppTimezone] = useState<TimezoneValue>(() => getSettings().timezone ?? DEFAULT_TIMEZONE);
 
-  // Create entry form state
-  const [sourceDeviceId, setSourceDeviceId] = useState('');
+  // Manual entry: target + date + timezone
   const [targetDeviceId, setTargetDeviceId] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(getYesterday());
-  const [divisor, setDivisor] = useState(defaultDivisor);
-  const [rounding, setRounding] = useState<'none' | 'integer' | 'one_decimal' | 'two_decimals'>('integer');
   const [entryTimezone, setEntryTimezone] = useState<TimezoneValue>(appTimezone);
   const [creatingEntry, setCreatingEntry] = useState(false);
-  const [previewEnergy, setPreviewEnergy] = useState<number | null>(null);
+
+  // Manual entry: production source
+  const [prodEnabled, setProdEnabled] = useState(true);
+  const [prodDeviceId, setProdDeviceId] = useState('');
+  const [prodDivisor, setProdDivisor] = useState(defaultDivisor);
+  const [prodRounding, setProdRounding] = useState<Rounding>('integer');
+
+  // Manual entry: waste source
+  const [wasteEnabled, setWasteEnabled] = useState(true);
+  const [wasteDeviceId, setWasteDeviceId] = useState('');
+  const [wasteDivisor, setWasteDivisor] = useState(defaultDivisor);
+  const [wasteRounding, setWasteRounding] = useState<Rounding>('integer');
+
+  // Preview energy map: deviceid -> total energy
+  const [previewEnergyMap, setPreviewEnergyMap] = useState<Record<string, number | null>>({});
   const [loadingPreview, setLoadingPreview] = useState(false);
 
   // Upload history from server
@@ -349,13 +467,20 @@ function App() {
   // Schedules
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
-  const [schedSourceDevice, setSchedSourceDevice] = useState('');
+
+  // Schedule form
   const [schedTargetDevice, setSchedTargetDevice] = useState('');
   const [schedFrequency, setSchedFrequency] = useState<'daily' | 'weekly'>('daily');
   const [schedTime, setSchedTime] = useState('06:00');
   const [schedTimezone, setSchedTimezone] = useState<TimezoneValue>(appTimezone);
-  const [schedDivisor, setSchedDivisor] = useState<number>(defaultDivisor);
-  const [schedRounding, setSchedRounding] = useState<'none' | 'integer' | 'one_decimal' | 'two_decimals'>('integer');
+  const [schedProdEnabled, setSchedProdEnabled] = useState(true);
+  const [schedProdDeviceId, setSchedProdDeviceId] = useState('');
+  const [schedProdDivisor, setSchedProdDivisor] = useState<number>(defaultDivisor);
+  const [schedProdRounding, setSchedProdRounding] = useState<Rounding>('integer');
+  const [schedWasteEnabled, setSchedWasteEnabled] = useState(true);
+  const [schedWasteDeviceId, setSchedWasteDeviceId] = useState('');
+  const [schedWasteDivisor, setSchedWasteDivisor] = useState<number>(defaultDivisor);
+  const [schedWasteRounding, setSchedWasteRounding] = useState<Rounding>('integer');
   const [creatingSched, setCreatingSched] = useState(false);
 
   // Settings tab
@@ -393,14 +518,23 @@ function App() {
     return map;
   }, [devices]);
 
-  const deviceName = (id: string) => deviceMap.get(id)?.nickname ?? id;
+  const deviceName = (id: string | null | undefined) =>
+    id ? (deviceMap.get(id)?.nickname ?? id) : '—';
 
-  // Fetch energy preview when source device + date change
+  // Fetch energy preview when date/timezone changes, for whichever source devices are enabled.
   useEffect(() => {
-    if (!sourceDeviceId || !selectedDate) {
-      setPreviewEnergy(null);
+    if (!selectedDate) {
+      setPreviewEnergyMap({});
       return;
     }
+    const devicesToFetch = new Set<string>();
+    if (prodEnabled && prodDeviceId) devicesToFetch.add(prodDeviceId);
+    if (wasteEnabled && wasteDeviceId) devicesToFetch.add(wasteDeviceId);
+    if (devicesToFetch.size === 0) {
+      setPreviewEnergyMap({});
+      return;
+    }
+
     let cancelled = false;
     async function loadPreview() {
       setLoadingPreview(true);
@@ -408,21 +542,28 @@ function App() {
         const range = getDayRange(selectedDate!, entryTimezone);
         const data = await fetchEnergy(range.fromTs, range.toTs);
         if (cancelled) return;
-        const deviceData = data.find((d) => d.deviceid === sourceDeviceId);
-        setPreviewEnergy(deviceData?.energy.total ?? null);
+        const map: Record<string, number | null> = {};
+        for (const id of devicesToFetch) {
+          const row = data.find((d) => d.deviceid === id);
+          map[id] = row?.energy.total ?? null;
+        }
+        setPreviewEnergyMap(map);
       } catch {
-        if (!cancelled) setPreviewEnergy(null);
+        if (!cancelled) setPreviewEnergyMap({});
       } finally {
         if (!cancelled) setLoadingPreview(false);
       }
     }
     loadPreview();
     return () => { cancelled = true; };
-  }, [sourceDeviceId, selectedDate, entryTimezone]);
+  }, [selectedDate, entryTimezone, prodEnabled, prodDeviceId, wasteEnabled, wasteDeviceId]);
 
-  const wastePreview = previewEnergy != null && divisor > 0
-    ? applyRounding(previewEnergy / divisor, rounding)
-    : null;
+  const prodEnergy = prodEnabled && prodDeviceId ? (previewEnergyMap[prodDeviceId] ?? null) : null;
+  const wasteEnergy = wasteEnabled && wasteDeviceId ? (previewEnergyMap[wasteDeviceId] ?? null) : null;
+  const prodValue = prodEnergy != null && prodDivisor > 0
+    ? applyRounding(prodEnergy / prodDivisor, prodRounding) : null;
+  const wasteValue = wasteEnergy != null && wasteDivisor > 0
+    ? applyRounding(wasteEnergy / wasteDivisor, wasteRounding) : null;
 
   const loadUploadHistory = async () => {
     setHistoryLoading(true);
@@ -435,22 +576,49 @@ function App() {
     }
   };
 
+  const canCreateEntry =
+    !!targetDeviceId &&
+    !!selectedDate &&
+    ((prodEnabled && !!prodDeviceId && prodDivisor > 0) ||
+     (wasteEnabled && !!wasteDeviceId && wasteDivisor > 0));
+
   const handleCreateEntry = async () => {
-    if (!sourceDeviceId || !targetDeviceId || !selectedDate || divisor <= 0) return;
+    if (!canCreateEntry || !selectedDate) return;
     setCreatingEntry(true);
     try {
       const range = getDayRange(selectedDate, entryTimezone);
+      const prodLeg = prodEnabled && prodDeviceId && prodValue != null
+        ? {
+            value: prodValue,
+            energy: prodEnergy,
+            source: { device_id: prodDeviceId, divisor: prodDivisor, rounding: prodRounding } as SourceConfig,
+          }
+        : null;
+      const wasteLeg = wasteEnabled && wasteDeviceId && wasteValue != null
+        ? {
+            value: wasteValue,
+            energy: wasteEnergy,
+            source: { device_id: wasteDeviceId, divisor: wasteDivisor, rounding: wasteRounding } as SourceConfig,
+          }
+        : null;
+
+      if (!prodLeg && !wasteLeg) {
+        toastFor(TOASTER_ID).error('No energy data available for the selected source(s).');
+        return;
+      }
+
       const result = await createProductionEntry(
-        targetDeviceId, range.fromUnix, range.toUnix, wastePreview,
-        { source_device_id: sourceDeviceId, total_energy: previewEnergy, divisor, rounding },
+        targetDeviceId, range.fromUnix, range.toUnix, prodLeg, wasteLeg, entryTimezone,
       );
 
       if (result.ok) {
         toastFor(TOASTER_ID).success(`Production entry created (${result.status}).`);
-        // Refresh server-side history
         loadUploadHistory();
       } else {
-        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`);
+        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`, {
+          duration: Infinity,
+          closeButton: true,
+        });
         loadUploadHistory();
       }
     } catch {
@@ -477,15 +645,15 @@ function App() {
 
   useEffect(() => {
     if (energyDate) loadEnergy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [energyDate]);
 
   const enrichedEnergy = useMemo(() => {
     return energy.map((e) => ({
       ...e,
       nickname: deviceMap.get(e.deviceid)?.nickname ?? e.deviceid,
-      wasteValue: e.energy.total != null && divisor > 0 ? +(e.energy.total / divisor).toFixed(4) : null,
     }));
-  }, [energy, deviceMap, divisor]);
+  }, [energy, deviceMap]);
 
   const displayedEnergy = useMemo(() => {
     const q = energySearch.trim().toLowerCase();
@@ -499,7 +667,6 @@ function App() {
       idle: (e) => e.energy.idle ?? -Infinity,
       offline: (e) => e.energy.offline ?? -Infinity,
       total: (e) => e.energy.total ?? -Infinity,
-      waste: (e) => e.wasteValue ?? -Infinity,
     };
     const keyFn = keyFns[energySortBy] ?? keyFns.nickname;
     return [...filtered].sort((a, b) => {
@@ -524,22 +691,21 @@ function App() {
     const q = historySearch.trim().toLowerCase();
     const filtered = q
       ? uploadHistory.filter((e) => {
-          const src = deviceName(e.source_device_id ?? '').toLowerCase();
           const tgt = deviceName(e.target_device_id).toLowerCase();
-          return src.includes(q) || tgt.includes(q);
+          const prodSrc = deviceName(e.production_source?.device_id).toLowerCase();
+          const wasteSrc = deviceName(e.waste_source?.device_id).toLowerCase();
+          return tgt.includes(q) || prodSrc.includes(q) || wasteSrc.includes(q);
         })
       : uploadHistory;
     const dir = historySortDir === 'asc' ? 1 : -1;
     const keyFns: Record<string, (e: UploadHistoryEntry) => string | number> = {
-      source: (e) => deviceName(e.source_device_id ?? '').toLowerCase(),
       target: (e) => deviceName(e.target_device_id).toLowerCase(),
       date: (e) => Number(e.from_ts) || 0,
-      energy: (e) => e.total_energy ?? -Infinity,
-      divisor: (e) => e.divisor ?? 0,
-      waste: (e) => (e.waste_value ?? -Infinity) as number,
+      production: (e) => e.production_value ?? -Infinity,
+      waste: (e) => e.waste_value ?? -Infinity,
       created: (e) => new Date(e.created_at).getTime(),
     };
-    const keyFn = keyFns[historySortBy] ?? keyFns.source;
+    const keyFn = keyFns[historySortBy] ?? keyFns.created;
     return [...filtered].sort((a, b) => {
       const av = keyFn(a);
       const bv = keyFn(b);
@@ -560,7 +726,6 @@ function App() {
   };
 
   const totalEnergy = useMemo(() => energy.reduce((sum, e) => sum + (e.energy.total ?? 0), 0), [energy]);
-  const totalWaste = divisor > 0 ? totalEnergy / divisor : 0;
 
   // Schedules
   const loadSchedules = async () => {
@@ -574,30 +739,46 @@ function App() {
     }
   };
 
+  const canCreateSchedule =
+    !!schedTargetDevice &&
+    ((schedProdEnabled && !!schedProdDeviceId && schedProdDivisor > 0) ||
+     (schedWasteEnabled && !!schedWasteDeviceId && schedWasteDivisor > 0));
+
   const handleCreateSchedule = async () => {
-    if (!schedSourceDevice || !schedTargetDevice) return;
+    if (!canCreateSchedule) return;
     setCreatingSched(true);
     try {
+      const production_source: SourceConfig | null =
+        schedProdEnabled && schedProdDeviceId
+          ? { device_id: schedProdDeviceId, divisor: schedProdDivisor, rounding: schedProdRounding }
+          : null;
+      const waste_source: SourceConfig | null =
+        schedWasteEnabled && schedWasteDeviceId
+          ? { device_id: schedWasteDeviceId, divisor: schedWasteDivisor, rounding: schedWasteRounding }
+          : null;
+
       const sched = await createSchedule({
-        source_device_id: schedSourceDevice,
         target_device_id: schedTargetDevice,
+        production_source,
+        waste_source,
         frequency: schedFrequency,
         time: schedTime,
         timezone: schedTimezone,
-        divisor: schedDivisor,
-        rounding: schedRounding,
         enabled: true,
       });
       setSchedules((prev) => [...prev, sched]);
-      setSchedSourceDevice('');
       setSchedTargetDevice('');
+      setSchedProdDeviceId('');
+      setSchedWasteDeviceId('');
       setSchedTime('06:00');
       setSchedTimezone(appTimezone);
-      setSchedDivisor(defaultDivisor);
-      setSchedRounding('none');
+      setSchedProdDivisor(defaultDivisor);
+      setSchedWasteDivisor(defaultDivisor);
+      setSchedProdRounding('integer');
+      setSchedWasteRounding('integer');
       toastFor(TOASTER_ID).success('Schedule created!');
-    } catch {
-      toastFor(TOASTER_ID).error('Failed to create schedule.');
+    } catch (err) {
+      toastFor(TOASTER_ID).error((err as Error).message || 'Failed to create schedule.');
     } finally {
       setCreatingSched(false);
     }
@@ -629,13 +810,18 @@ function App() {
     try {
       const result = await runScheduleNow(sched.id);
       if (result.skipped) {
-        toastFor(TOASTER_ID).error(`Skipped: ${result.reason === 'no_energy_data' ? 'No energy data for source device' : result.reason}`);
+        toastFor(TOASTER_ID).error(`Skipped: ${result.reason === 'no_energy_data' ? 'No energy data for source device(s)' : result.reason}`);
       } else if (result.error) {
-        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`);
+        toastFor(TOASTER_ID).error(`SAFI error (${result.status}): ${result.error}`, {
+          duration: Infinity,
+          closeButton: true,
+        });
       } else {
-        toastFor(TOASTER_ID).success(`Entry created! Energy: ${result.energy?.toFixed(1)} kWh, Waste: ${result.waste}`);
+        const parts: string[] = [];
+        if (result.production_value != null) parts.push(`production=${result.production_value}`);
+        if (result.waste_value != null) parts.push(`waste=${result.waste_value}`);
+        toastFor(TOASTER_ID).success(`Entry created! ${parts.join(', ')}`);
       }
-      // Refresh upload history to include the new entry
       loadUploadHistory();
     } catch (err: any) {
       toastFor(TOASTER_ID).error(err.message || 'Failed to run schedule.');
@@ -648,7 +834,8 @@ function App() {
     if (settingsDivisor <= 0) return;
     saveSettings({ default_divisor: settingsDivisor, timezone: settingsTimezone });
     setDefaultDivisor(settingsDivisor);
-    setDivisor(settingsDivisor);
+    setProdDivisor(settingsDivisor);
+    setWasteDivisor(settingsDivisor);
     setAppTimezone(settingsTimezone);
     setEntryTimezone(settingsTimezone);
     setSchedTimezone(settingsTimezone);
@@ -663,6 +850,11 @@ function App() {
       setSettingsDivisor(s.default_divisor);
       setSettingsTimezone(s.timezone ?? DEFAULT_TIMEZONE);
     }
+  };
+
+  const formatSource = (src: SourceConfig | null): string => {
+    if (!src) return 'off';
+    return `${deviceName(src.device_id)} ÷${src.divisor}`;
   };
 
   return (
@@ -707,21 +899,13 @@ function App() {
             <CardHeader>
               <CardTitle>Create Production Entry</CardTitle>
               <CardDescription>
-                Pull energy from a source device, divide to calculate waste, and create a production entry on the target device.
+                Pull energy from up to two source devices and map each to production quantity or waste quantity on a target device.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <FlexColumn spacing={4}>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label className="mb-1.5 block text-sm">Source device (pull energy from)</Label>
-                    <DevicePicker
-                      devices={devices}
-                      value={sourceDeviceId}
-                      onChange={setSourceDeviceId}
-                      placeholder="Select source device"
-                    />
-                  </div>
+                {/* Target + date + timezone */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div>
                     <Label className="mb-1.5 block text-sm">Target device (create entry for)</Label>
                     <DevicePicker
@@ -731,9 +915,6 @@ function App() {
                       placeholder="Select target device"
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <Label className="mb-1.5 block text-sm">Date</Label>
                     <PastDatePicker
@@ -745,9 +926,7 @@ function App() {
                   <div>
                     <Label className="mb-1.5 block text-sm">Timezone</Label>
                     <Select value={entryTimezone} onValueChange={(v) => setEntryTimezone(v as TimezoneValue)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {TIMEZONE_OPTIONS.map((tz) => (
                           <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
@@ -755,63 +934,72 @@ function App() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label className="mb-1.5 block text-sm">Divide energy by</Label>
-                    <NumberInput
-                      value={divisor}
-                      onChange={(e) => setDivisor(Number(e.target.value))}
-                      min={0.01}
-                      step={1}
-                    />
-                  </div>
-                  <div>
-                    <Label className="mb-1.5 block text-sm">Waste rounding</Label>
-                    <Select value={rounding} onValueChange={(v) => setRounding(v as typeof rounding)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No rounding (raw)</SelectItem>
-                        <SelectItem value="integer">Round to integer</SelectItem>
-                        <SelectItem value="one_decimal">1 decimal place</SelectItem>
-                        <SelectItem value="two_decimals">2 decimal places</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
-                {/* Preview */}
-                {sourceDeviceId && selectedDate && (
+                {/* Two source sections side-by-side */}
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <SourceSection
+                    title="Production source"
+                    description="Populates production_qty"
+                    enabled={prodEnabled}
+                    onEnabledChange={setProdEnabled}
+                    deviceId={prodDeviceId}
+                    onDeviceChange={setProdDeviceId}
+                    divisor={prodDivisor}
+                    onDivisorChange={setProdDivisor}
+                    rounding={prodRounding}
+                    onRoundingChange={setProdRounding}
+                    devices={devices}
+                    energy={prodEnergy}
+                    loadingEnergy={loadingPreview}
+                    computedLabel="Production qty"
+                  />
+                  <SourceSection
+                    title="Waste source"
+                    description="Populates waste_qty"
+                    enabled={wasteEnabled}
+                    onEnabledChange={setWasteEnabled}
+                    deviceId={wasteDeviceId}
+                    onDeviceChange={setWasteDeviceId}
+                    divisor={wasteDivisor}
+                    onDivisorChange={setWasteDivisor}
+                    rounding={wasteRounding}
+                    onRoundingChange={setWasteRounding}
+                    devices={devices}
+                    energy={wasteEnergy}
+                    loadingEnergy={loadingPreview}
+                    computedLabel="Waste qty"
+                  />
+                </div>
+
+                {/* Combined preview */}
+                {(prodEnabled || wasteEnabled) && targetDeviceId && selectedDate && (
                   <div className="rounded-md border border-muted bg-background-accent p-4">
-                    {loadingPreview ? (
-                      <FlexRow spacing={2} className="items-center">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-4 w-24" />
-                      </FlexRow>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-                        <div>
-                          <p className="text-muted-foreground">Source</p>
-                          <p className="font-medium text-foreground">{deviceName(sourceDeviceId)}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Date</p>
-                          <p className="font-medium text-foreground">{getDayRange(selectedDate, entryTimezone).label}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Total Energy</p>
-                          <p className="font-medium text-foreground">
-                            {previewEnergy != null ? `${previewEnergy.toFixed(4)} kWh` : '—'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Est. Waste (÷ {divisor})</p>
-                          <p className="font-semibold text-primary">
-                            {wastePreview != null ? wastePreview : '—'}
-                          </p>
-                        </div>
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Entry preview
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+                      <div>
+                        <p className="text-muted-foreground">Target</p>
+                        <p className="font-medium text-foreground">{deviceName(targetDeviceId)}</p>
                       </div>
-                    )}
+                      <div>
+                        <p className="text-muted-foreground">Date</p>
+                        <p className="font-medium text-foreground">{getDayRange(selectedDate, entryTimezone).label}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">production_qty</p>
+                        <p className="font-semibold text-primary">
+                          {prodValue != null ? prodValue : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">waste_qty</p>
+                        <p className="font-semibold text-primary">
+                          {wasteValue != null ? wasteValue : '—'}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -820,7 +1008,7 @@ function App() {
                     color="primary"
                     onClick={handleCreateEntry}
                     loading={creatingEntry}
-                    disabled={!sourceDeviceId || !targetDeviceId || !selectedDate || divisor <= 0}
+                    disabled={!canCreateEntry}
                   >
                     Create Entry
                   </Button>
@@ -855,8 +1043,7 @@ function App() {
                   </Button>
                 </FlexRow>
 
-                {/* Summary cards */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Card>
                     <CardHeader><CardTitle>Devices</CardTitle></CardHeader>
                     <CardContent>
@@ -873,17 +1060,8 @@ function App() {
                         : <p className="text-3xl font-semibold text-foreground">{totalEnergy.toFixed(2)}</p>}
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardHeader><CardTitle>Est. Waste (÷ {divisor})</CardTitle></CardHeader>
-                    <CardContent>
-                      {energyLoading
-                        ? <Skeleton className="h-8 w-24" />
-                        : <p className="text-3xl font-semibold text-primary">{totalWaste.toFixed(4)}</p>}
-                    </CardContent>
-                  </Card>
                 </div>
 
-                {/* Energy table */}
                 <Card>
                   <CardContent className="pt-6">
                     <FlexColumn spacing={3}>
@@ -910,13 +1088,12 @@ function App() {
                               <SortableHead label="Idle (kWh)" columnId="idle" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
                               <SortableHead label="Offline (kWh)" columnId="offline" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
                               <SortableHead label="Total (kWh)" columnId="total" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
-                              <SortableHead label={`Waste (÷ ${divisor})`} columnId="waste" sortBy={energySortBy} sortDir={energySortDir} onSort={handleEnergySort} align="right" />
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {displayedEnergy.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">
                                   {energySearch ? 'No devices match your search.' : 'No energy data for this date.'}
                                 </TableCell>
                               </TableRow>
@@ -927,9 +1104,6 @@ function App() {
                                 <TableCell className="text-right">{e.energy.idle?.toFixed(2) ?? '—'}</TableCell>
                                 <TableCell className="text-right">{e.energy.offline?.toFixed(2) ?? '—'}</TableCell>
                                 <TableCell className="text-right">{e.energy.total?.toFixed(2) ?? '—'}</TableCell>
-                                <TableCell className="text-right font-semibold text-primary">
-                                  {e.wasteValue?.toFixed(4) ?? '—'}
-                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -979,79 +1153,79 @@ function App() {
                         />
                       </div>
                       <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <SortableHead label="Created" columnId="created" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
-                          <TableHead>Source</TableHead>
-                          <SortableHead label="Source Device" columnId="source" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
-                          <SortableHead label="Target Device" columnId="target" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
-                          <SortableHead label="Date" columnId="date" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
-                          <SortableHead label="Energy (kWh)" columnId="energy" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
-                          <SortableHead label="Divisor" columnId="divisor" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
-                          <SortableHead label="Waste" columnId="waste" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
-                          <TableHead>Rounding</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {displayedHistory.length === 0 ? (
+                        <TableHeader>
                           <TableRow>
-                            <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-6">
-                              No entries match your search.
-                            </TableCell>
+                            <SortableHead label="Created" columnId="created" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
+                            <TableHead>Source</TableHead>
+                            <SortableHead label="Target" columnId="target" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
+                            <SortableHead label="Date" columnId="date" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} />
+                            <TableHead>Production from</TableHead>
+                            <SortableHead label="production_qty" columnId="production" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
+                            <TableHead>Waste from</TableHead>
+                            <SortableHead label="waste_qty" columnId="waste" sortBy={historySortBy} sortDir={historySortDir} onSort={handleHistorySort} align="right" />
+                            <TableHead>Status</TableHead>
                           </TableRow>
-                        ) : displayedHistory.map((entry) => (
-                          <TableRow key={entry.id + entry.created_at}>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {new Date(entry.created_at).toLocaleString()}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={entry.source === 'scheduled' ? 'secondary' : 'outline'} size="sm">
-                                {entry.source === 'scheduled' ? 'Scheduled' : 'Manual'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {deviceName(entry.source_device_id ?? '')}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {deviceName(entry.target_device_id)}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {formatTs(entry.from_ts)}
-                            </TableCell>
-                            <TableCell className="text-right text-sm">
-                              {entry.total_energy != null ? entry.total_energy.toFixed(4) : '—'}
-                            </TableCell>
-                            <TableCell className="text-right text-sm">
-                              ÷ {entry.divisor ?? 60}
-                            </TableCell>
-                            <TableCell className="text-right font-semibold text-primary">
-                              {entry.waste_value != null ? entry.waste_value : '—'}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {formatRounding(entry.rounding ?? 'none')}
-                            </TableCell>
-                            <TableCell>
-                              {entry.api_error ? (
-                                <Badge variant="danger">
-                                  <FlexRow spacing={1} className="items-center">
-                                    <AlertTriangleIcon size="xs" />
-                                    {entry.api_status ?? 'err'}: {entry.api_error}
-                                  </FlexRow>
+                        </TableHeader>
+                        <TableBody>
+                          {displayedHistory.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-6">
+                                No entries match your search.
+                              </TableCell>
+                            </TableRow>
+                          ) : displayedHistory.map((entry) => (
+                            <TableRow key={entry.id + entry.created_at}>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {new Date(entry.created_at).toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={entry.source === 'scheduled' ? 'secondary' : 'outline'} size="sm">
+                                  {entry.source === 'scheduled' ? 'Scheduled' : 'Manual'}
                                 </Badge>
-                              ) : (
-                                <Badge variant="success">
-                                  <FlexRow spacing={1} className="items-center">
-                                    <CheckIcon size="xs" />
-                                    {entry.api_status ?? ''} created
-                                  </FlexRow>
-                                </Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {deviceName(entry.target_device_id)}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {formatTs(entry.from_ts)}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {entry.production_source
+                                  ? `${deviceName(entry.production_source.device_id)} ÷${entry.production_source.divisor}`
+                                  : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-right font-semibold text-primary">
+                                {entry.production_value != null ? entry.production_value : '—'}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {entry.waste_source
+                                  ? `${deviceName(entry.waste_source.device_id)} ÷${entry.waste_source.divisor}`
+                                  : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-right font-semibold text-primary">
+                                {entry.waste_value != null ? entry.waste_value : '—'}
+                              </TableCell>
+                              <TableCell>
+                                {entry.api_error ? (
+                                  <Badge variant="danger">
+                                    <FlexRow spacing={1} className="items-center">
+                                      <AlertTriangleIcon size="xs" />
+                                      {entry.api_status ?? 'err'}: {entry.api_error}
+                                    </FlexRow>
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="success">
+                                    <FlexRow spacing={1} className="items-center">
+                                      <CheckIcon size="xs" />
+                                      {entry.api_status ?? ''} created
+                                    </FlexRow>
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </FlexColumn>
                   )}
                 </CardContent>
@@ -1065,23 +1239,16 @@ function App() {
                   <CardHeader>
                     <CardTitle>New Schedule</CardTitle>
                     <CardDescription>
-                      Automate pulling energy from one device and creating a waste production entry on another.
+                      Automate pulling energy from up to two source devices and creating a production entry
+                      on the target device each day or week.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <FlexColumn spacing={4}>
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {/* Target + frequency + time + timezone */}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <div>
-                          <Label className="mb-1.5 block text-sm">Energy source device</Label>
-                          <DevicePicker
-                            devices={devices}
-                            value={schedSourceDevice}
-                            onChange={setSchedSourceDevice}
-                            placeholder="Pull energy from..."
-                          />
-                        </div>
-                        <div>
-                          <Label className="mb-1.5 block text-sm">Target device for production entry</Label>
+                          <Label className="mb-1.5 block text-sm">Target device</Label>
                           <DevicePicker
                             devices={devices}
                             value={schedTargetDevice}
@@ -1089,15 +1256,10 @@ function App() {
                             placeholder="Create entry for..."
                           />
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                         <div>
                           <Label className="mb-1.5 block text-sm">Frequency</Label>
                           <Select value={schedFrequency} onValueChange={(v) => setSchedFrequency(v as typeof schedFrequency)}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="daily">Daily</SelectItem>
                               <SelectItem value="weekly">Weekly</SelectItem>
@@ -1115,9 +1277,7 @@ function App() {
                         <div>
                           <Label className="mb-1.5 block text-sm">Timezone</Label>
                           <Select value={schedTimezone} onValueChange={(v) => setSchedTimezone(v as TimezoneValue)}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {TIMEZONE_OPTIONS.map((tz) => (
                                 <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
@@ -1125,32 +1285,41 @@ function App() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div>
-                          <Label className="mb-1.5 block text-sm">Divide energy by</Label>
-                          <NumberInput
-                            min={0}
-                            step={1}
-                            value={Number.isFinite(schedDivisor) ? schedDivisor : ''}
-                            onChange={(e) => {
-                              const n = Number(e.target.value);
-                              setSchedDivisor(Number.isFinite(n) ? n : 0);
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <Label className="mb-1.5 block text-sm">Waste rounding</Label>
-                          <Select value={schedRounding} onValueChange={(v) => setSchedRounding(v as typeof schedRounding)}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">No rounding (raw)</SelectItem>
-                              <SelectItem value="integer">Round to integer</SelectItem>
-                              <SelectItem value="one_decimal">1 decimal place</SelectItem>
-                              <SelectItem value="two_decimals">2 decimal places</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <SourceSection
+                          title="Production source"
+                          description="Populates production_qty"
+                          enabled={schedProdEnabled}
+                          onEnabledChange={setSchedProdEnabled}
+                          deviceId={schedProdDeviceId}
+                          onDeviceChange={setSchedProdDeviceId}
+                          divisor={schedProdDivisor}
+                          onDivisorChange={setSchedProdDivisor}
+                          rounding={schedProdRounding}
+                          onRoundingChange={setSchedProdRounding}
+                          devices={devices}
+                          energy={null}
+                          loadingEnergy={false}
+                          computedLabel="Production qty"
+                        />
+                        <SourceSection
+                          title="Waste source"
+                          description="Populates waste_qty"
+                          enabled={schedWasteEnabled}
+                          onEnabledChange={setSchedWasteEnabled}
+                          deviceId={schedWasteDeviceId}
+                          onDeviceChange={setSchedWasteDeviceId}
+                          divisor={schedWasteDivisor}
+                          onDivisorChange={setSchedWasteDivisor}
+                          rounding={schedWasteRounding}
+                          onRoundingChange={setSchedWasteRounding}
+                          devices={devices}
+                          energy={null}
+                          loadingEnergy={false}
+                          computedLabel="Waste qty"
+                        />
                       </div>
 
                       <div className="rounded-md border border-muted bg-background-accent p-3 text-sm">
@@ -1177,24 +1346,34 @@ function App() {
                             </TableRow>
                           </TableBody>
                         </Table>
-                        <p className="mt-2 text-muted-foreground">
-                          A daily schedule at 02:00 and one at 23:00 pull the <strong className="text-foreground">same window</strong> —
-                          they just run at different clock times. Pick a time a few hours after midnight
-                          so all sensor data has flushed to SAFI.
-                        </p>
                       </div>
 
-                      {schedSourceDevice && schedTargetDevice && (
+                      {schedTargetDevice && (schedProdEnabled || schedWasteEnabled) && (
                         <div className="rounded-md border border-muted bg-background-accent p-3 text-sm">
                           <p className="text-muted-foreground">
                             <strong className="text-foreground">Preview:</strong>{' '}
                             Every {schedFrequency === 'daily' ? 'day' : 'week'} at{' '}
-                            {schedTime} {TIMEZONE_OPTIONS.find(t => t.value === schedTimezone)?.label ?? schedTimezone}, pull energy from{' '}
-                            <strong className="text-foreground">{deviceName(schedSourceDevice)}</strong>,
-                            divide by {schedDivisor}
-                            {schedRounding !== 'none' && ` (${formatRounding(schedRounding).toLowerCase()})`},
-                            and create a production entry on{' '}
-                            <strong className="text-foreground">{deviceName(schedTargetDevice)}</strong>.
+                            {schedTime} {TIMEZONE_OPTIONS.find(t => t.value === schedTimezone)?.label ?? schedTimezone},
+                            create a production entry on{' '}
+                            <strong className="text-foreground">{deviceName(schedTargetDevice)}</strong> with{' '}
+                            {schedProdEnabled && schedProdDeviceId && (
+                              <>
+                                production_qty from{' '}
+                                <strong className="text-foreground">{deviceName(schedProdDeviceId)}</strong>{' '}
+                                (÷{schedProdDivisor}
+                                {schedProdRounding !== 'none' && `, ${formatRounding(schedProdRounding).toLowerCase()}`})
+                              </>
+                            )}
+                            {schedProdEnabled && schedProdDeviceId && schedWasteEnabled && schedWasteDeviceId && ' and '}
+                            {schedWasteEnabled && schedWasteDeviceId && (
+                              <>
+                                waste_qty from{' '}
+                                <strong className="text-foreground">{deviceName(schedWasteDeviceId)}</strong>{' '}
+                                (÷{schedWasteDivisor}
+                                {schedWasteRounding !== 'none' && `, ${formatRounding(schedWasteRounding).toLowerCase()}`})
+                              </>
+                            )}
+                            .
                           </p>
                         </div>
                       )}
@@ -1204,7 +1383,7 @@ function App() {
                           color="primary"
                           onClick={handleCreateSchedule}
                           loading={creatingSched}
-                          disabled={!schedSourceDevice || !schedTargetDevice}
+                          disabled={!canCreateSchedule}
                         >
                           Create Schedule
                         </Button>
@@ -1246,14 +1425,22 @@ function App() {
                               <FlexRow spacing={2} className="items-center">
                                 <ClockIcon size="sm" />
                                 <span className="text-sm font-medium text-foreground">
-                                  {deviceName(sched.source_device_id)} → {deviceName(sched.target_device_id)}
+                                  → {deviceName(sched.target_device_id)}
                                 </span>
                                 <Badge variant={sched.enabled ? 'success' : 'outline'}>
                                   {sched.enabled ? 'Active' : 'Paused'}
                                 </Badge>
                               </FlexRow>
                               <p className="ml-6 text-xs text-muted-foreground">
-                                {sched.frequency.charAt(0).toUpperCase() + sched.frequency.slice(1)} at {sched.time} {TIMEZONE_OPTIONS.find(t => t.value === sched.timezone)?.label ?? sched.timezone ?? 'PT'} · ÷{sched.divisor ?? defaultDivisor} · {formatRounding(sched.rounding)}
+                                {sched.frequency.charAt(0).toUpperCase() + sched.frequency.slice(1)} at {sched.time} {TIMEZONE_OPTIONS.find(t => t.value === sched.timezone)?.label ?? sched.timezone ?? 'PT'}
+                              </p>
+                              <p className="ml-6 text-xs text-muted-foreground">
+                                <span className="font-medium">production_qty:</span> {formatSource(sched.production_source)}
+                                {sched.production_source && sched.production_source.rounding !== 'none' && ` · ${formatRounding(sched.production_source.rounding).toLowerCase()}`}
+                              </p>
+                              <p className="ml-6 text-xs text-muted-foreground">
+                                <span className="font-medium">waste_qty:</span> {formatSource(sched.waste_source)}
+                                {sched.waste_source && sched.waste_source.rounding !== 'none' && ` · ${formatRounding(sched.waste_source.rounding).toLowerCase()}`}
                               </p>
                             </FlexColumn>
                             <FlexRow spacing={3} className="items-center">
@@ -1307,15 +1494,13 @@ function App() {
                         step={1}
                       />
                       <p className="mt-1.5 text-xs text-muted-foreground">
-                        Energy will be divided by this number to calculate waste. This value is used as the default when creating new entries.
+                        Energy is divided by this number to calculate quantities. Used as the default for new entries and schedules.
                       </p>
                     </div>
                     <div className="max-w-xs">
                       <Label className="mb-1.5 block text-sm">Default timezone</Label>
                       <Select value={settingsTimezone} onValueChange={(v) => setSettingsTimezone(v as TimezoneValue)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {TIMEZONE_OPTIONS.map((tz) => (
                             <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
@@ -1323,7 +1508,7 @@ function App() {
                         </SelectContent>
                       </Select>
                       <p className="mt-1.5 text-xs text-muted-foreground">
-                        Default timezone for new entries and schedules. Controls which calendar day's midnight-to-midnight is used for energy lookups and production entries.
+                        Default timezone for new entries and schedules.
                       </p>
                     </div>
                     <div>

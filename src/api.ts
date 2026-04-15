@@ -1,12 +1,8 @@
 // fd-app serves everything on the same origin — auth is handled via session cookies.
-// Device/energy reads go through our custom /api/devices + /api/devices/energy
-// routes (api-key auth) because SAFI staging doesn't accept JWT Bearer tokens
-// on these endpoints — the framework's /api/safi/* proxy would return 401 and
-// the client helper would fire bridge.notifySessionExpired(), kicking off an
-// iframe reload loop. Once SAFI supports Bearer everywhere we can switch back
-// to safiApi.getDevices()/getDevicesEnergy() from @safi_ai/fd-app.
-// Write endpoints (schedules, production entries, history) are also our own
-// custom Hono routes in server.ts.
+// Device/energy reads go through the framework's /api/safi/* proxy which adds
+// Bearer auth from the session and handles token refresh automatically.
+// Write endpoints (schedules, production entries, history) use custom Hono routes
+// in server.ts that also authenticate via the session's Bearer token.
 
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
@@ -130,17 +126,14 @@ export interface Schedule {
 
 export async function fetchDevices(): Promise<Device[]> {
   if (DEMO_MODE) return DEMO_DEVICES;
-  // Custom /api/devices route uses api-key (SAFI staging doesn't accept Bearer yet).
-  // DEV_BYPASS uses the same backend — the dev/prod distinction was retired
-  // along with the Bearer-auth /api/safi/* path.
-  const res = await fetch('/api/devices');
+  const res = await fetch('/api/safi/devices');
   if (!res.ok) throw new Error('Failed to fetch devices');
   const data = await res.json();
   return data.data ?? data;
 }
 
 export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceEnergy[]> {
-  // SAFI staging requires millisecond timestamps — ISO strings return null energy.
+  // SAFI requires millisecond timestamps — ISO strings return null energy.
   const fromMs = new Date(fromTs).getTime();
   const toMs = new Date(toTs).getTime();
   if (DEMO_MODE) {
@@ -158,7 +151,7 @@ export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceE
     });
   }
   const params = new URLSearchParams({ from_ts: String(fromMs), to_ts: String(toMs), group_by: 'day' });
-  const res = await fetch(`/api/devices/energy?${params}`);
+  const res = await fetch(`/api/safi/devices/energy?${params}`);
   if (!res.ok) throw new Error('Failed to fetch energy data');
   const data = await res.json();
   return data.data ?? data;
@@ -230,9 +223,10 @@ export async function createProductionEntry(
 }
 
 export async function fetchProductionEntry(id: string): Promise<ProductionEntry> {
-  const res = await fetch(`/api/production-entries/${id}`);
+  const res = await fetch(`/api/safi/production-entries/${id}`);
   if (!res.ok) throw new Error('Failed to fetch production entry');
-  return res.json();
+  const data = await res.json();
+  return data.data ?? data;
 }
 
 export interface UploadHistoryEntry {

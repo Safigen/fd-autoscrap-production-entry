@@ -1,14 +1,5 @@
-// In dev, Vite runs on :5173 and Express on :3001 → use an absolute URL.
-// In prod, Express serves the SPA and the API on the same origin → use a relative URL.
-const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:3001' : '');
-
-function authHeaders(): HeadersInit {
-  const token = localStorage.getItem('auth_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
+// fd-app serves everything on the same origin — auth is handled via session cookies.
+const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
 export interface Device {
   deviceid: string;
@@ -63,11 +54,26 @@ export interface CreatedEntry {
 
 const SETTINGS_KEY = 'app_settings';
 
+export const TIMEZONE_OPTIONS = [
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+  { value: 'America/Denver', label: 'Mountain Time (MT)' },
+  { value: 'America/Chicago', label: 'Central Time (CT)' },
+  { value: 'America/New_York', label: 'Eastern Time (ET)' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AKT)' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HT)' },
+  { value: 'UTC', label: 'UTC' },
+] as const;
+
+export type TimezoneValue = (typeof TIMEZONE_OPTIONS)[number]['value'];
+
+export const DEFAULT_TIMEZONE: TimezoneValue = 'America/Los_Angeles';
+
 export interface AppSettings {
   default_divisor: number;
+  timezone: TimezoneValue;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { default_divisor: 60 };
+const DEFAULT_SETTINGS: AppSettings = { default_divisor: 60, timezone: DEFAULT_TIMEZONE };
 
 export function getSettings(): AppSettings {
   try {
@@ -89,6 +95,7 @@ export interface Schedule {
   target_device_id: string;
   frequency: 'daily' | 'weekly';
   time: string;
+  timezone: TimezoneValue;
   divisor: number;
   rounding: 'none' | 'integer' | 'one_decimal' | 'two_decimals';
   enabled: boolean;
@@ -117,17 +124,21 @@ export function storeEntry(entry: CreatedEntry): void {
 // --- API calls ---
 
 export async function fetchDevices(): Promise<Device[]> {
-  const res = await fetch(`${API_URL}/api/devices`, { headers: authHeaders() });
+  const res = await fetch('/api/safi/devices');
   if (!res.ok) throw new Error('Failed to fetch devices');
   const data = await res.json();
   return data.data ?? data;
 }
 
 export async function fetchEnergy(fromTs: string, toTs: string): Promise<DeviceEnergy[]> {
-  const params = new URLSearchParams({ from_ts: fromTs, to_ts: toTs });
-  const res = await fetch(`${API_URL}/api/devices/energy?${params}`, { headers: authHeaders() });
+  // SAFI staging requires millisecond timestamps — ISO strings return null energy.
+  const fromMs = new Date(fromTs).getTime();
+  const toMs = new Date(toTs).getTime();
+  const params = new URLSearchParams({ from_ts: String(fromMs), to_ts: String(toMs), group_by: 'day' });
+  const res = await fetch(`/api/safi/devices/energy?${params}`);
   if (!res.ok) throw new Error('Failed to fetch energy data');
-  return res.json();
+  const data = await res.json();
+  return data.data ?? data;
 }
 
 export interface CreateEntryResult {
@@ -142,14 +153,21 @@ export async function createProductionEntry(
   fromTs: number,
   toTs: number,
   wasteValue?: number | null,
+  metadata?: { source_device_id?: string; total_energy?: number | null; divisor?: number; rounding?: string },
 ): Promise<CreateEntryResult> {
   const body: Record<string, unknown> = { device_id: deviceId, from_ts: fromTs, to_ts: toTs };
   if (wasteValue != null) {
     body.waste = { wasted: wasteValue };
   }
-  const res = await fetch(`${API_URL}/api/production-entries`, {
+  if (metadata) {
+    if (metadata.source_device_id) body.source_device_id = metadata.source_device_id;
+    if (metadata.total_energy != null) body.total_energy = metadata.total_energy;
+    if (metadata.divisor != null) body.divisor = metadata.divisor;
+    if (metadata.rounding) body.rounding = metadata.rounding;
+  }
+  const res = await fetch('/api/production-entries', {
     method: 'POST',
-    headers: authHeaders(),
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
   const json = await res.json();
@@ -162,21 +180,44 @@ export async function createProductionEntry(
 }
 
 export async function fetchProductionEntry(id: string): Promise<ProductionEntry> {
-  const res = await fetch(`${API_URL}/api/production-entries/${id}`, { headers: authHeaders() });
+  const res = await fetch(`/api/production-entries/${id}`);
   if (!res.ok) throw new Error('Failed to fetch production entry');
   return res.json();
 }
 
+export interface UploadHistoryEntry {
+  id: string;
+  source: 'manual' | 'scheduled';
+  schedule_id?: string;
+  source_device_id: string | null;
+  target_device_id: string;
+  from_ts: number;
+  to_ts: number;
+  total_energy: number | null;
+  waste_value: number | null;
+  divisor: number | null;
+  rounding: string | null;
+  api_status: number;
+  api_error: string | null;
+  created_at: string;
+}
+
+export async function fetchUploadHistory(): Promise<UploadHistoryEntry[]> {
+  const res = await fetch('/api/upload-history');
+  if (!res.ok) throw new Error('Failed to fetch upload history');
+  return res.json();
+}
+
 export async function fetchSchedules(): Promise<Schedule[]> {
-  const res = await fetch(`${API_URL}/api/schedules`, { headers: authHeaders() });
+  const res = await fetch('/api/schedules');
   if (!res.ok) throw new Error('Failed to fetch schedules');
   return res.json();
 }
 
 export async function createSchedule(schedule: Omit<Schedule, 'id' | 'created_at'>): Promise<Schedule> {
-  const res = await fetch(`${API_URL}/api/schedules`, {
+  const res = await fetch('/api/schedules', {
     method: 'POST',
-    headers: authHeaders(),
+    headers: JSON_HEADERS,
     body: JSON.stringify(schedule),
   });
   if (!res.ok) throw new Error('Failed to create schedule');
@@ -184,9 +225,9 @@ export async function createSchedule(schedule: Omit<Schedule, 'id' | 'created_at
 }
 
 export async function updateSchedule(id: string, updates: Partial<Schedule>): Promise<Schedule> {
-  const res = await fetch(`${API_URL}/api/schedules/${id}`, {
+  const res = await fetch(`/api/schedules/${id}`, {
     method: 'PATCH',
-    headers: authHeaders(),
+    headers: JSON_HEADERS,
     body: JSON.stringify(updates),
   });
   if (!res.ok) throw new Error('Failed to update schedule');
@@ -194,9 +235,29 @@ export async function updateSchedule(id: string, updates: Partial<Schedule>): Pr
 }
 
 export async function deleteSchedule(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/schedules/${id}`, {
+  const res = await fetch(`/api/schedules/${id}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   if (!res.ok) throw new Error('Failed to delete schedule');
+}
+
+export interface ScheduleRunResult {
+  skipped?: boolean;
+  reason?: string;
+  status?: number;
+  entry_id?: string | null;
+  energy?: number | null;
+  waste?: number | null;
+  error?: string | null;
+}
+
+export async function runScheduleNow(id: string): Promise<ScheduleRunResult> {
+  const res = await fetch(`/api/schedules/${id}/run`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Run failed (${res.status})`);
+  }
+  return res.json();
 }

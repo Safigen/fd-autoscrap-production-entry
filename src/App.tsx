@@ -388,8 +388,8 @@ function SourceSection({
   onEnabledChange,
   deviceId,
   onDeviceChange,
-  divisor,
-  onDivisorChange,
+  multiplier,
+  onMultiplierChange,
   rounding,
   onRoundingChange,
   devices,
@@ -403,8 +403,8 @@ function SourceSection({
   onEnabledChange: (v: boolean) => void;
   deviceId: string;
   onDeviceChange: (id: string) => void;
-  divisor: number;
-  onDivisorChange: (n: number) => void;
+  multiplier: number;
+  onMultiplierChange: (n: number) => void;
   rounding: Rounding;
   onRoundingChange: (r: Rounding) => void;
   devices: Device[];
@@ -412,7 +412,7 @@ function SourceSection({
   loadingEnergy: boolean;
   computedLabel: string;
 }) {
-  const computed = enabled && energy != null && divisor > 0 ? applyRounding(energy / divisor, rounding) : null;
+  const computed = enabled && energy != null && multiplier > 0 ? applyRounding(energy * multiplier, rounding) : null;
   return (
     <div className={`rounded-md border p-4 ${enabled ? 'border-muted' : 'border-muted opacity-70'}`}>
       <FlexColumn spacing={3}>
@@ -437,12 +437,12 @@ function SourceSection({
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <Label className="mb-1.5 block text-sm">Divide energy by</Label>
+                <Label className="mb-1.5 block text-sm">Multiply energy by</Label>
                 <NumberInput
-                  value={Number.isFinite(divisor) ? divisor : ''}
+                  value={Number.isFinite(multiplier) ? multiplier : ''}
                   onChange={(e) => {
                     const n = Number(e.target.value);
-                    onDivisorChange(Number.isFinite(n) ? n : 0);
+                    onMultiplierChange(Number.isFinite(n) ? n : 0);
                   }}
                   min={0.01}
                   step={1}
@@ -477,7 +477,7 @@ function SourceSection({
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-xs">{computedLabel} (÷ {divisor})</p>
+                      <p className="text-muted-foreground text-xs">{computedLabel} (× {multiplier})</p>
                       <p className="font-semibold text-primary">
                         {computed != null ? computed : '—'}
                       </p>
@@ -533,7 +533,7 @@ function App() {
   }, [session?.username]);
 
   // Settings
-  const [defaultDivisor, setDefaultDivisor] = useState(() => getSettings().default_divisor);
+  const [defaultMultiplier, setDefaultMultiplier] = useState(() => getSettings().default_multiplier);
   const [appTimezone, setAppTimezone] = useState<TimezoneValue>(() => getSettings().timezone ?? DEFAULT_TIMEZONE);
 
   // Manual entry: target + date + timezone
@@ -545,13 +545,13 @@ function App() {
   // Manual entry: production source
   const [prodEnabled, setProdEnabled] = useState(true);
   const [prodDeviceId, setProdDeviceId] = useState('');
-  const [prodDivisor, setProdDivisor] = useState(defaultDivisor);
+  const [prodMultiplier, setProdMultiplier] = useState(defaultMultiplier);
   const [prodRounding, setProdRounding] = useState<Rounding>('integer');
 
   // Manual entry: waste source
   const [wasteEnabled, setWasteEnabled] = useState(true);
   const [wasteDeviceId, setWasteDeviceId] = useState('');
-  const [wasteDivisor, setWasteDivisor] = useState(defaultDivisor);
+  const [wasteMultiplier, setWasteMultiplier] = useState(defaultMultiplier);
   const [wasteRounding, setWasteRounding] = useState<Rounding>('integer');
 
   // Preview energy map: deviceid -> total energy
@@ -578,16 +578,16 @@ function App() {
   const [schedTimezone, setSchedTimezone] = useState<TimezoneValue>(appTimezone);
   const [schedProdEnabled, setSchedProdEnabled] = useState(true);
   const [schedProdDeviceId, setSchedProdDeviceId] = useState('');
-  const [schedProdDivisor, setSchedProdDivisor] = useState<number>(defaultDivisor);
+  const [schedProdMultiplier, setSchedProdMultiplier] = useState<number>(defaultMultiplier);
   const [schedProdRounding, setSchedProdRounding] = useState<Rounding>('integer');
   const [schedWasteEnabled, setSchedWasteEnabled] = useState(true);
   const [schedWasteDeviceId, setSchedWasteDeviceId] = useState('');
-  const [schedWasteDivisor, setSchedWasteDivisor] = useState<number>(defaultDivisor);
+  const [schedWasteMultiplier, setSchedWasteMultiplier] = useState<number>(defaultMultiplier);
   const [schedWasteRounding, setSchedWasteRounding] = useState<Rounding>('integer');
   const [creatingSched, setCreatingSched] = useState(false);
 
   // Settings tab
-  const [settingsDivisor, setSettingsDivisor] = useState(defaultDivisor);
+  const [settingsMultiplier, setSettingsMultiplier] = useState(defaultMultiplier);
   const [settingsTimezone, setSettingsTimezone] = useState<TimezoneValue>(appTimezone);
 
   // Energy table controls
@@ -663,10 +663,10 @@ function App() {
 
   const prodEnergy = prodEnabled && prodDeviceId ? (previewEnergyMap[prodDeviceId] ?? null) : null;
   const wasteEnergy = wasteEnabled && wasteDeviceId ? (previewEnergyMap[wasteDeviceId] ?? null) : null;
-  const prodValue = prodEnergy != null && prodDivisor > 0
-    ? applyRounding(prodEnergy / prodDivisor, prodRounding) : null;
-  const wasteValue = wasteEnergy != null && wasteDivisor > 0
-    ? applyRounding(wasteEnergy / wasteDivisor, wasteRounding) : null;
+  const prodValue = prodEnergy != null && prodMultiplier > 0
+    ? applyRounding(prodEnergy * prodMultiplier, prodRounding) : null;
+  const wasteValue = wasteEnergy != null && wasteMultiplier > 0
+    ? applyRounding(wasteEnergy * wasteMultiplier, wasteRounding) : null;
 
   const loadUploadHistory = async () => {
     setHistoryLoading(true);
@@ -682,8 +682,8 @@ function App() {
   const canCreateEntry =
     !!targetDeviceId &&
     !!selectedDate &&
-    ((prodEnabled && !!prodDeviceId && prodDivisor > 0) ||
-     (wasteEnabled && !!wasteDeviceId && wasteDivisor > 0));
+    ((prodEnabled && !!prodDeviceId && prodMultiplier > 0) ||
+     (wasteEnabled && !!wasteDeviceId && wasteMultiplier > 0));
 
   const handleCreateEntry = async () => {
     if (!canCreateEntry || !selectedDate) return;
@@ -694,14 +694,14 @@ function App() {
         ? {
             value: prodValue,
             energy: prodEnergy,
-            source: { device_id: prodDeviceId, divisor: prodDivisor, rounding: prodRounding } as SourceConfig,
+            source: { device_id: prodDeviceId, multiplier: prodMultiplier, rounding: prodRounding } as SourceConfig,
           }
         : null;
       const wasteLeg = wasteEnabled && wasteDeviceId && wasteValue != null
         ? {
             value: wasteValue,
             energy: wasteEnergy,
-            source: { device_id: wasteDeviceId, divisor: wasteDivisor, rounding: wasteRounding } as SourceConfig,
+            source: { device_id: wasteDeviceId, multiplier: wasteMultiplier, rounding: wasteRounding } as SourceConfig,
           }
         : null;
 
@@ -844,8 +844,8 @@ function App() {
 
   const canCreateSchedule =
     !!schedTargetDevice &&
-    ((schedProdEnabled && !!schedProdDeviceId && schedProdDivisor > 0) ||
-     (schedWasteEnabled && !!schedWasteDeviceId && schedWasteDivisor > 0));
+    ((schedProdEnabled && !!schedProdDeviceId && schedProdMultiplier > 0) ||
+     (schedWasteEnabled && !!schedWasteDeviceId && schedWasteMultiplier > 0));
 
   const handleCreateSchedule = async () => {
     if (!canCreateSchedule) return;
@@ -853,11 +853,11 @@ function App() {
     try {
       const production_source: SourceConfig | null =
         schedProdEnabled && schedProdDeviceId
-          ? { device_id: schedProdDeviceId, divisor: schedProdDivisor, rounding: schedProdRounding }
+          ? { device_id: schedProdDeviceId, multiplier: schedProdMultiplier, rounding: schedProdRounding }
           : null;
       const waste_source: SourceConfig | null =
         schedWasteEnabled && schedWasteDeviceId
-          ? { device_id: schedWasteDeviceId, divisor: schedWasteDivisor, rounding: schedWasteRounding }
+          ? { device_id: schedWasteDeviceId, multiplier: schedWasteMultiplier, rounding: schedWasteRounding }
           : null;
 
       const sched = await createSchedule({
@@ -875,8 +875,8 @@ function App() {
       setSchedWasteDeviceId('');
       setSchedTime('06:00');
       setSchedTimezone(appTimezone);
-      setSchedProdDivisor(defaultDivisor);
-      setSchedWasteDivisor(defaultDivisor);
+      setSchedProdMultiplier(defaultMultiplier);
+      setSchedWasteMultiplier(defaultMultiplier);
       setSchedProdRounding('integer');
       setSchedWasteRounding('integer');
       toastFor(TOASTER_ID).success('Schedule created!');
@@ -934,11 +934,11 @@ function App() {
   };
 
   const handleSaveSettings = () => {
-    if (settingsDivisor <= 0) return;
-    saveSettings({ default_divisor: settingsDivisor, timezone: settingsTimezone });
-    setDefaultDivisor(settingsDivisor);
-    setProdDivisor(settingsDivisor);
-    setWasteDivisor(settingsDivisor);
+    if (settingsMultiplier <= 0) return;
+    saveSettings({ default_multiplier: settingsMultiplier, timezone: settingsTimezone });
+    setDefaultMultiplier(settingsMultiplier);
+    setProdMultiplier(settingsMultiplier);
+    setWasteMultiplier(settingsMultiplier);
     setAppTimezone(settingsTimezone);
     setEntryTimezone(settingsTimezone);
     setSchedTimezone(settingsTimezone);
@@ -950,14 +950,14 @@ function App() {
     if (tab === 'schedules' && schedules.length === 0) loadSchedules();
     if (tab === 'settings') {
       const s = getSettings();
-      setSettingsDivisor(s.default_divisor);
+      setSettingsMultiplier(s.default_multiplier);
       setSettingsTimezone(s.timezone ?? DEFAULT_TIMEZONE);
     }
   };
 
   const formatSource = (src: SourceConfig | null): string => {
     if (!src) return 'off';
-    return `${deviceName(src.device_id)} ÷${src.divisor}`;
+    return `${deviceName(src.device_id)} ×${src.multiplier}`;
   };
 
   return (
@@ -1048,8 +1048,8 @@ function App() {
                     onEnabledChange={setProdEnabled}
                     deviceId={prodDeviceId}
                     onDeviceChange={setProdDeviceId}
-                    divisor={prodDivisor}
-                    onDivisorChange={setProdDivisor}
+                    multiplier={prodMultiplier}
+                    onMultiplierChange={setProdMultiplier}
                     rounding={prodRounding}
                     onRoundingChange={setProdRounding}
                     devices={devices}
@@ -1064,8 +1064,8 @@ function App() {
                     onEnabledChange={setWasteEnabled}
                     deviceId={wasteDeviceId}
                     onDeviceChange={setWasteDeviceId}
-                    divisor={wasteDivisor}
-                    onDivisorChange={setWasteDivisor}
+                    multiplier={wasteMultiplier}
+                    onMultiplierChange={setWasteMultiplier}
                     rounding={wasteRounding}
                     onRoundingChange={setWasteRounding}
                     devices={devices}
@@ -1294,7 +1294,7 @@ function App() {
                               </TableCell>
                               <TableCell className="text-sm">
                                 {entry.production_source
-                                  ? `${deviceName(entry.production_source.device_id)} ÷${entry.production_source.divisor}`
+                                  ? `${deviceName(entry.production_source.device_id)} ×${entry.production_source.multiplier}`
                                   : <span className="text-muted-foreground">—</span>}
                               </TableCell>
                               <TableCell className="text-right font-semibold text-primary">
@@ -1302,7 +1302,7 @@ function App() {
                               </TableCell>
                               <TableCell className="text-sm">
                                 {entry.waste_source
-                                  ? `${deviceName(entry.waste_source.device_id)} ÷${entry.waste_source.divisor}`
+                                  ? `${deviceName(entry.waste_source.device_id)} ×${entry.waste_source.multiplier}`
                                   : <span className="text-muted-foreground">—</span>}
                               </TableCell>
                               <TableCell className="text-right font-semibold text-primary">
@@ -1398,8 +1398,8 @@ function App() {
                           onEnabledChange={setSchedProdEnabled}
                           deviceId={schedProdDeviceId}
                           onDeviceChange={setSchedProdDeviceId}
-                          divisor={schedProdDivisor}
-                          onDivisorChange={setSchedProdDivisor}
+                          multiplier={schedProdMultiplier}
+                          onMultiplierChange={setSchedProdMultiplier}
                           rounding={schedProdRounding}
                           onRoundingChange={setSchedProdRounding}
                           devices={devices}
@@ -1414,8 +1414,8 @@ function App() {
                           onEnabledChange={setSchedWasteEnabled}
                           deviceId={schedWasteDeviceId}
                           onDeviceChange={setSchedWasteDeviceId}
-                          divisor={schedWasteDivisor}
-                          onDivisorChange={setSchedWasteDivisor}
+                          multiplier={schedWasteMultiplier}
+                          onMultiplierChange={setSchedWasteMultiplier}
                           rounding={schedWasteRounding}
                           onRoundingChange={setSchedWasteRounding}
                           devices={devices}
@@ -1463,7 +1463,7 @@ function App() {
                               <>
                                 production_qty from{' '}
                                 <strong className="text-foreground">{deviceName(schedProdDeviceId)}</strong>{' '}
-                                (÷{schedProdDivisor}
+                                (×{schedProdMultiplier}
                                 {schedProdRounding !== 'none' && `, ${formatRounding(schedProdRounding).toLowerCase()}`})
                               </>
                             )}
@@ -1472,7 +1472,7 @@ function App() {
                               <>
                                 waste_qty from{' '}
                                 <strong className="text-foreground">{deviceName(schedWasteDeviceId)}</strong>{' '}
-                                (÷{schedWasteDivisor}
+                                (×{schedWasteMultiplier}
                                 {schedWasteRounding !== 'none' && `, ${formatRounding(schedWasteRounding).toLowerCase()}`})
                               </>
                             )}
@@ -1589,15 +1589,15 @@ function App() {
                 <CardContent>
                   <FlexColumn spacing={4}>
                     <div className="max-w-xs">
-                      <Label className="mb-1.5 block text-sm">Default energy divisor</Label>
+                      <Label className="mb-1.5 block text-sm">Default energy multiplier</Label>
                       <NumberInput
-                        value={settingsDivisor}
-                        onChange={(e) => setSettingsDivisor(Number(e.target.value))}
+                        value={settingsMultiplier}
+                        onChange={(e) => setSettingsMultiplier(Number(e.target.value))}
                         min={0.01}
                         step={1}
                       />
                       <p className="mt-1.5 text-xs text-muted-foreground">
-                        Energy is divided by this number to calculate quantities. Used as the default for new entries and schedules.
+                        Energy is multiplied by this number to calculate quantities. Used as the default for new entries and schedules.
                       </p>
                     </div>
                     <div className="max-w-xs">
@@ -1618,7 +1618,7 @@ function App() {
                       <Button
                         color="primary"
                         onClick={handleSaveSettings}
-                        disabled={settingsDivisor <= 0}
+                        disabled={settingsMultiplier <= 0}
                       >
                         Save Settings
                       </Button>

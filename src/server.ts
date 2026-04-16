@@ -70,7 +70,7 @@ type Rounding = 'none' | 'integer' | 'one_decimal' | 'two_decimals'
 
 interface SourceConfig {
   device_id: string
-  divisor: number
+  multiplier: number
   rounding: Rounding
 }
 
@@ -107,9 +107,36 @@ interface HistoryEntry {
 
 // --- Schedule persistence ---
 
+// One-shot migration: older stored SourceConfigs used `divisor` when the math
+// was energy / divisor. After we flipped the formula to energy * multiplier,
+// rename the field on load so existing schedules keep working. The numeric
+// value is preserved as-is — users who had a divisor of 60 will now multiply
+// by 60, so they may need to re-enter sensible values, but the app won't
+// crash on validation.
+function migrateSourceConfig(src: unknown): unknown {
+  if (src == null || typeof src !== 'object') return src
+  const s = src as Record<string, unknown>
+  if (s.multiplier == null && s.divisor != null) {
+    return { ...s, multiplier: s.divisor, divisor: undefined }
+  }
+  return s
+}
+
+function migrateSchedule(raw: unknown): Schedule {
+  const s = raw as Record<string, unknown>
+  return {
+    ...(s as unknown as Schedule),
+    production_source: migrateSourceConfig(s.production_source) as SourceConfig | null,
+    waste_source: migrateSourceConfig(s.waste_source) as SourceConfig | null,
+  }
+}
+
 function loadSchedules(): Schedule[] {
   if (!existsSync(SCHEDULES_FILE)) return []
-  try { return JSON.parse(readFileSync(SCHEDULES_FILE, 'utf-8')) } catch { return [] }
+  try {
+    const raw = JSON.parse(readFileSync(SCHEDULES_FILE, 'utf-8')) as unknown[]
+    return raw.map(migrateSchedule)
+  } catch { return [] }
 }
 
 function saveSchedules(schedules: Schedule[]): void {
@@ -118,9 +145,21 @@ function saveSchedules(schedules: Schedule[]): void {
 
 // --- Upload history persistence ---
 
+function migrateHistoryEntry(raw: unknown): HistoryEntry {
+  const h = raw as Record<string, unknown>
+  return {
+    ...(h as unknown as HistoryEntry),
+    production_source: migrateSourceConfig(h.production_source) as SourceConfig | null,
+    waste_source: migrateSourceConfig(h.waste_source) as SourceConfig | null,
+  }
+}
+
 function loadHistory(): HistoryEntry[] {
   if (!existsSync(HISTORY_FILE)) return []
-  try { return JSON.parse(readFileSync(HISTORY_FILE, 'utf-8')) } catch { return [] }
+  try {
+    const raw = JSON.parse(readFileSync(HISTORY_FILE, 'utf-8')) as unknown[]
+    return raw.map(migrateHistoryEntry)
+  } catch { return [] }
 }
 
 function saveHistory(history: HistoryEntry[]): void {
@@ -151,8 +190,8 @@ function validateSourceConfig(src: unknown, field: string): string | null {
   if (typeof src !== 'object') return `${field} must be an object`
   const s = src as Record<string, unknown>
   if (typeof s.device_id !== 'string' || !DEVICE_ID_RE.test(s.device_id)) return `invalid ${field}.device_id`
-  const div = Number(s.divisor)
-  if (!Number.isFinite(div) || div <= 0) return `${field}.divisor must be a positive number`
+  const mult = Number(s.multiplier)
+  if (!Number.isFinite(mult) || mult <= 0) return `${field}.multiplier must be a positive number`
   if (s.rounding != null && !VALID_ROUNDINGS.has(s.rounding as Rounding)) return `invalid ${field}.rounding`
   return null
 }
@@ -162,7 +201,7 @@ function normalizeSourceConfig(src: unknown): SourceConfig | null {
   const s = src as Record<string, unknown>
   return {
     device_id: s.device_id as string,
-    divisor: Number(s.divisor),
+    multiplier: Number(s.multiplier),
     rounding: (s.rounding as Rounding) ?? 'none',
   }
 }
@@ -345,7 +384,7 @@ function computeSourceValue(rows: EnergyRow[], src: SourceConfig | null): { ener
   const row = rows.find(r => r.deviceid === src.device_id)
   const energy = row?.energy?.total ?? null
   if (energy == null) return { energy: null, value: null }
-  const value = src.divisor > 0 ? applyRounding(energy / src.divisor, src.rounding || 'none') : null
+  const value = src.multiplier > 0 ? applyRounding(energy * src.multiplier, src.rounding || 'none') : null
   return { energy, value }
 }
 

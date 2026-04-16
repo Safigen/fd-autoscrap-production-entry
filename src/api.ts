@@ -66,7 +66,7 @@ export type Rounding = 'none' | 'integer' | 'one_decimal' | 'two_decimals';
 
 export interface SourceConfig {
   device_id: string;
-  divisor: number;
+  multiplier: number;
   rounding: Rounding;
 }
 
@@ -89,15 +89,21 @@ export type TimezoneValue = (typeof TIMEZONE_OPTIONS)[number]['value'];
 export const DEFAULT_TIMEZONE: TimezoneValue = 'America/Los_Angeles';
 
 export interface AppSettings {
-  default_divisor: number;
+  default_multiplier: number;
   timezone: TimezoneValue;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { default_divisor: 60, timezone: DEFAULT_TIMEZONE };
+const DEFAULT_SETTINGS: AppSettings = { default_multiplier: 1, timezone: DEFAULT_TIMEZONE };
 
 export function getSettings(): AppSettings {
   try {
     const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    // Migrate older `default_divisor` values carried over from when the math
+    // was energy / divisor. The numeric value is preserved; semantics flipped.
+    if (stored.default_divisor != null && stored.default_multiplier == null) {
+      stored.default_multiplier = stored.default_divisor;
+      delete stored.default_divisor;
+    }
     return { ...DEFAULT_SETTINGS, ...stored };
   } catch {
     return DEFAULT_SETTINGS;

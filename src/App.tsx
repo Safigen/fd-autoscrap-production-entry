@@ -57,6 +57,18 @@ beacon('module_load', { ua: typeof navigator !== 'undefined' ? navigator.userAge
 
 const TOASTER_ID = 'main-toaster';
 
+// Format a number with en-US thousands separators (e.g. 1024382.57 → "1,024,382.57").
+// If `decimals` is provided, the result is padded/truncated to that many decimal
+// places; otherwise the number's existing precision is preserved.
+function formatNum(n: number | null | undefined, decimals?: number): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  if (decimals == null) return n.toLocaleString('en-US');
+  return n.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 function formatConflictTs(ms: number, tz: string): string {
   try {
     return new Date(ms).toLocaleString('en-US', {
@@ -473,13 +485,13 @@ function SourceSection({
                     <div>
                       <p className="text-muted-foreground text-xs">Total Energy</p>
                       <p className="font-medium text-foreground">
-                        {energy != null ? `${energy.toFixed(4)} kWh` : '—'}
+                        {energy != null ? `${formatNum(energy, 4)} kWh` : '—'}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs">{computedLabel} (× {multiplier})</p>
                       <p className="font-semibold text-primary">
-                        {computed != null ? computed : '—'}
+                        {computed != null ? formatNum(computed) : '—'}
                       </p>
                     </div>
                   </div>
@@ -962,19 +974,6 @@ function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Prototype banner */}
-      <div
-        className="flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-medium"
-        style={{
-          backgroundColor: 'var(--color-danger-0)',
-          color: 'var(--color-danger-700)',
-          borderBottom: '1px solid var(--color-danger-200)',
-        }}
-      >
-        <AlertTriangleIcon size="xs" />
-        Prototype — not connected to production data
-      </div>
-
       <div className="mx-auto w-full max-w-5xl px-6 py-8">
         <FlexColumn spacing={6}>
           {/* Header */}
@@ -1160,7 +1159,7 @@ function App() {
                     <CardContent>
                       {energyLoading
                         ? <Skeleton className="h-8 w-24" />
-                        : <p className="text-3xl font-semibold text-foreground">{totalEnergy.toFixed(2)}</p>}
+                        : <p className="text-3xl font-semibold text-foreground">{formatNum(totalEnergy, 2)}</p>}
                     </CardContent>
                   </Card>
                 </div>
@@ -1203,10 +1202,10 @@ function App() {
                             ) : displayedEnergy.map((e) => (
                               <TableRow key={e.deviceid}>
                                 <TableCell className="font-medium">{e.nickname}</TableCell>
-                                <TableCell className="text-right">{e.energy.online?.toFixed(2) ?? '—'}</TableCell>
-                                <TableCell className="text-right">{e.energy.idle?.toFixed(2) ?? '—'}</TableCell>
-                                <TableCell className="text-right">{e.energy.offline?.toFixed(2) ?? '—'}</TableCell>
-                                <TableCell className="text-right">{e.energy.total?.toFixed(2) ?? '—'}</TableCell>
+                                <TableCell className="text-right">{formatNum(e.energy.online, 2)}</TableCell>
+                                <TableCell className="text-right">{formatNum(e.energy.idle, 2)}</TableCell>
+                                <TableCell className="text-right">{formatNum(e.energy.offline, 2)}</TableCell>
+                                <TableCell className="text-right">{formatNum(e.energy.total, 2)}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -1298,7 +1297,7 @@ function App() {
                                   : <span className="text-muted-foreground">—</span>}
                               </TableCell>
                               <TableCell className="text-right font-semibold text-primary">
-                                {entry.production_value != null ? entry.production_value : '—'}
+                                {formatNum(entry.production_value)}
                               </TableCell>
                               <TableCell className="text-sm">
                                 {entry.waste_source
@@ -1306,7 +1305,7 @@ function App() {
                                   : <span className="text-muted-foreground">—</span>}
                               </TableCell>
                               <TableCell className="text-right font-semibold text-primary">
-                                {entry.waste_value != null ? entry.waste_value : '—'}
+                                {formatNum(entry.waste_value)}
                               </TableCell>
                               <TableCell>
                                 {entry.api_error ? (
